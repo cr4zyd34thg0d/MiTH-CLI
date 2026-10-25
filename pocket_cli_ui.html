@@ -1033,6 +1033,53 @@
       font-weight: 500;
     }
 
+    /* Semantic Purpose Indicators & Neon Purple Tags */
+    .md-tag-purple {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: rgba(168, 85, 247, 0.16);
+      border: 1px solid rgba(192, 132, 252, 0.42);
+      border-radius: 999px;
+      padding: 1px 8px 1px 6px;
+      margin: 1px 3px 1px 0;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      color: #F3E8FF;
+      box-shadow: 0 0 10px rgba(168, 85, 247, 0.25);
+      vertical-align: 1px;
+    }
+
+    .md-tag-purple .md-tag-dot {
+      width: 5.5px;
+      height: 5.5px;
+      border-radius: 50%;
+      background-color: #C084FC;
+      box-shadow: 0 0 6px #C084FC;
+      flex-shrink: 0;
+    }
+
+    .md-tag-purple .md-tag-name {
+      color: #E9D5FF;
+      text-transform: uppercase;
+    }
+
+    .md-tag-purple .md-tag-val {
+      color: #FAF5FF;
+      font-weight: 500;
+      padding-left: 3px;
+      border-left: 1px solid rgba(192, 132, 252, 0.35);
+      margin-left: 3px;
+    }
+
+    .md-blockquote.purple {
+      border-left: 3px solid #A855F7;
+      background: rgba(168, 85, 247, 0.09);
+      color: #F3E8FF;
+    }
+
     .md-code-block {
       margin: 6px 0 8px 0;
       border-radius: 8px;
@@ -3119,8 +3166,8 @@
          (100% textContent assignment — raw HTML string injection is NEVER used)
          ======================================================================= */
       function appendInlineFormatted(parent, text) {
-        // Tokenizes markdown links [label](url), inline `code`, and **bold** strictly via DOM nodes
-        var pattern = /(\[`?[^\]\n]+`?\]\([^)\n]+\)|`[^`\n]+`|\*\*[^*\n]+\*\*)/g;
+        // Tokenizes markdown links [label](url), semantic purple tags [TAG] / [TAG: val], inline `code`, and **bold**
+        var pattern = /(\[`?[^\]\n]+`?\]\([^)\n]+\)|\[(?:PURPOSE|ACTION|INSIGHT|PLAN|VERIFY|STATUS|GOAL|CHECKPOINT|NOTE|TIP|MILESTONE|PURPLE)(?::[^\]\n]+)?\]|`[^`\n]+`|\*\*[^*\n]+\*\*)/gi;
         var lastIdx = 0;
         var match;
         while ((match = pattern.exec(text)) !== null) {
@@ -3129,6 +3176,36 @@
           }
           var token = match[0];
           if (token.charAt(0) === '[') {
+            // Check for semantic purple tag first: [TAG] or [TAG: val]
+            var tagMatch = token.match(/^\[(PURPOSE|ACTION|INSIGHT|PLAN|VERIFY|STATUS|GOAL|CHECKPOINT|NOTE|TIP|MILESTONE|PURPLE)(?::\s*([^\]]+))?\]$/i);
+            if (tagMatch) {
+              var tagName = tagMatch[1].toUpperCase();
+              var tagVal = (tagMatch[2] || '').trim();
+
+              var tagPill = document.createElement('span');
+              tagPill.className = 'md-tag-purple';
+
+              var dot = document.createElement('span');
+              dot.className = 'md-tag-dot';
+              tagPill.appendChild(dot);
+
+              var nameEl = document.createElement('span');
+              nameEl.className = 'md-tag-name';
+              nameEl.textContent = tagName;
+              tagPill.appendChild(nameEl);
+
+              if (tagVal) {
+                var valEl = document.createElement('span');
+                valEl.className = 'md-tag-val';
+                valEl.textContent = tagVal;
+                tagPill.appendChild(valEl);
+              }
+
+              parent.appendChild(tagPill);
+              lastIdx = pattern.lastIndex;
+              continue;
+            }
+
             var linkMatch = token.match(/^\[`?([^\]`]+)`?\]\(([^)]+)\)$/);
             if (linkMatch) {
               var lbl = linkMatch[1].replace(/^\*\*|\*\*$/g, '');
@@ -3242,8 +3319,9 @@
             flushPara();
             flushList();
             var bq = document.createElement('div');
-            bq.className = 'md-blockquote';
-            appendInlineFormatted(bq, quoteMatch[1].replace(/^\[!(?:NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*/i, ''));
+            var isPurple = /^\[!(?:PURPOSE|INSIGHT|PLAN|GOAL|PURPLE)\]/i.test(quoteMatch[1]) || /\[PURPOSE\]/i.test(quoteMatch[1]);
+            bq.className = 'md-blockquote' + (isPurple ? ' purple' : '');
+            appendInlineFormatted(bq, quoteMatch[1].replace(/^\[!(?:NOTE|TIP|IMPORTANT|WARNING|CAUTION|PURPOSE|INSIGHT|PLAN|GOAL|PURPLE)\]\s*/i, ''));
             container.appendChild(bq);
             continue;
           }
