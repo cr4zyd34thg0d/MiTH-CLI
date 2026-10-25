@@ -1,4 +1,12 @@
-# MiTH CLI runs on Python 3.10+ standard library out of the box!
-# Optional conveniences for local development & testing:
+# MiTH CLI's core server runs on the Python 3.10+ standard library alone.
+# Everything below is OPTIONAL — install with:  pip install -r requirements.txt
+
+# Loads `.env` automatically (a built-in minimal parser is used if this is absent).
 python-dotenv>=1.0.0
+
+# Native Lock Screen / banner push alerts (the bell button). Without it the app runs normally;
+# the bell simply reports that push isn't available.
+pywebpush>=2.0.0
+
+# Development: run the test suite with `python -m pytest tests`.
 pytest>=8.0.0

@@ -43,7 +43,10 @@ git clone https://github.com/cr4zyd34thg0d/MiTH-CLI.git
 cd MiTH-CLI
 ```
 
-*(Runs out-of-the-box on Python 3.10+ standard library. Optional: `pip install -r requirements.txt`)*
+**Prerequisites**
+* **Python 3.10+** — the core server uses only the standard library.
+* **An AI coding CLI on your `PATH` for AI mode.** MiTH CLI drives the Antigravity `agy` CLI (override with `AGY_BIN_PATH`). It must be installed and signed in on the computer running the server. **Shell mode (`$`) works without it.**
+* **Optional:** `pip install -r requirements.txt` adds `python-dotenv` (auto-loads `.env`), `pywebpush` (Lock Screen push alerts) and `pytest`.
 
 ### 2. Configure Your PIN & Workspace
 Copy the example environment template (`.env` is strictly git-ignored so your secrets are never committed):
@@ -71,6 +74,17 @@ chmod +x start_pocket_cli.sh
 Verify it is running locally:
 ```bash
 curl http://127.0.0.1:8788/api/health
+```
+
+**Optional pieces that need extra setup (the app runs fine without them):**
+* **Lock Screen push alerts** — `pip install pywebpush`, serve over HTTPS (Tailscale/Cloudflare, step 4), add the app to your iPhone Home Screen (iOS 16.4+), then tap the 🔔 button once.
+* **Discord PIN pairing** — only if you set `DISCORD_BOT_TOKEN` / `DISCORD_GUILD_ID` / `OWNER_USER_ID`; otherwise just sign in with `POCKET_CLI_PIN`.
+* **Stems audio player** — built around the author's own music-folder layout, so it stays empty on a fresh install. Point `ALLOWED_AUDIO_ROOTS` / the track roots in `pocket_cli_server.py` at your own folders to use it.
+
+**Run the tests (optional):**
+```bash
+pip install -r requirements.txt
+python -m pytest tests
 ```
 
 ### 4. Connect Securely From Your Phone
