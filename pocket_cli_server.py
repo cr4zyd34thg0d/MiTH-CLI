@@ -2918,6 +2918,12 @@ class PocketCLIHandler(BaseHTTPRequestHandler):
             except Exception as exc:
                 safe_err = scrub_secrets(str(exc))
                 logger.exception("Error during /api/run (%s): %s", effective_mode, safe_err)
+                if isinstance(exc, FileNotFoundError) and effective_mode == "agy":
+                    # Most common first-run failure on a fresh install: the AI CLI isn't installed / on PATH.
+                    safe_err = (
+                        f"AI CLI not found ('{state.agy_bin_path}'). Install the Antigravity `agy` CLI and sign in, "
+                        "or set AGY_BIN_PATH in .env. Shell mode (start a message with `$`) works without it."
+                    )
                 emit_ndjson({"type": "error", "error": safe_err})
                 emit_ndjson(
                     {
