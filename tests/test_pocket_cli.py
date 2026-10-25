@@ -416,6 +416,21 @@ class PocketCLIServerTests(unittest.TestCase):
         self.assertEqual(raw_passed_prompt, "write a python function to compute fibonacci")
         self.assertNotIn("<flash_mastered_prompt>", raw_passed_prompt)
 
+    # --- (g) The literal model name "auto" must never reach `agy` (it rejects it) ---
+    def test_g_auto_model_never_passed_to_agy(self) -> None:
+        # Force the "no smart router installed" path (what every fresh fork runs) with GEMINI_MODEL=auto.
+        with patch.object(pcs, "DEFAULT_MODEL", "auto"), patch.object(
+            pcs.importlib.util, "spec_from_file_location", return_value=None
+        ):
+            model, effort = pcs.resolve_model_and_effort(
+                "build a multi step deployment pipeline for this service and explain the plan", "auto"
+            )
+            quick_model, _ = pcs.resolve_model_and_effort("what time is it?", "auto")
+        self.assertNotEqual(model.lower(), "auto")
+        self.assertTrue(model.startswith(("gemini-", "claude-", "gpt-")), model)
+        self.assertIn(effort, ("low", "medium", "high", "xhigh", "max"))
+        self.assertNotEqual(quick_model.lower(), "auto")
+
 
 if __name__ == "__main__":
     unittest.main()
