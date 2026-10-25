@@ -732,34 +732,50 @@
     .turn-block {
       display: flex;
       flex-direction: column;
-      gap: 7px;
-      min-width: 0;
-    }
-
-    .turn-prompt-row {
-      display: flex;
-      align-items: baseline;
       gap: 8px;
       min-width: 0;
     }
 
+    /* Distinct User Prompt Bubble (Right-Aligned Slate Glass Pill) */
+    .turn-prompt-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 7px;
+      align-self: flex-end;
+      max-width: 90%;
+      background: linear-gradient(135deg, rgba(30, 58, 138, 0.32), rgba(15, 23, 42, 0.48));
+      border: 1px solid rgba(56, 189, 248, 0.28);
+      border-radius: 13px 13px 3px 13px;
+      padding: 7px 11px;
+      margin: 2px 0 4px auto;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    }
+
     .prompt-glyph {
       font-family: var(--font-mono);
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--accent-green);
+      font-size: 11px;
+      font-weight: 700;
+      color: #38BDF8;
+      background: rgba(56, 189, 248, 0.16);
+      border-radius: 4px;
+      padding: 1px 5px;
       flex-shrink: 0;
+      margin-top: 1px;
       user-select: none;
     }
 
     .prompt-glyph.shell {
-      color: var(--accent-green);
+      color: #34D399;
+      background: rgba(16, 185, 129, 0.16);
     }
 
     .prompt-text {
       flex: 1 1 auto;
       min-width: 0;
-      color: var(--text-primary);
+      color: #F8FAFC;
+      font-family: var(--font-sans);
+      font-size: 13.5px;
+      line-height: 1.45;
       font-weight: 500;
       white-space: pre-wrap;
       word-break: break-word;
@@ -767,9 +783,37 @@
 
     .prompt-time {
       flex-shrink: 0;
-      font-size: 10.5px;
-      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: #94A3B8;
+      margin-top: 2px;
       user-select: none;
+    }
+
+    /* Subtle Hairline Turn Separator Between Chats */
+    .turn-end-divider {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin: 14px 0 10px 0;
+      opacity: 0.6;
+    }
+
+    .turn-end-divider::before,
+    .turn-end-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(63, 63, 70, 0.6) 25%, rgba(63, 63, 70, 0.6) 75%, transparent);
+    }
+
+    .turn-end-dot {
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background-color: #818CF8;
+      box-shadow: 0 0 6px #818CF8;
     }
 
     /* Stage-0 Prompt Enhancer Collapsible Trace */
@@ -902,7 +946,9 @@
 
     /* Streaming & Formatted Output */
     .turn-output {
-      padding: 4px 2px 2px 2px;
+      padding: 4px 6px 4px 10px;
+      margin-left: 2px;
+      border-left: 2px solid rgba(168, 85, 247, 0.28);
       color: #D4D4D8;
       font-family: var(--font-sans);
       font-size: 14px;
@@ -3859,7 +3905,15 @@
             hdrDiv.textContent = (tabObj.source === 'app' ? 'Desktop App Chat \u2022 ' : 'WSL CLI Chat \u2022 ') + (tabObj.title || tabObj.conversationId.slice(0, 8));
             builtNodes.push(hdrDiv);
 
-            data.turns.forEach(function (tItem) {
+            data.turns.forEach(function (tItem, tIdx) {
+              if (tIdx > 0) {
+                var divEl = document.createElement('div');
+                divEl.className = 'turn-end-divider';
+                var dotEl = document.createElement('span');
+                dotEl.className = 'turn-end-dot';
+                divEl.appendChild(dotEl);
+                builtNodes.push(divEl);
+              }
               var block = document.createElement('article');
               block.className = 'turn-block';
               var pRow = document.createElement('div');
@@ -4326,6 +4380,22 @@
         syncTopControlsUI();
 
         // Build Turn DOM Block
+        if (turnsList.children.length > 0) {
+          var divEl = document.createElement('div');
+          divEl.className = 'turn-end-divider';
+          var dotEl = document.createElement('span');
+          dotEl.className = 'turn-end-dot';
+          divEl.appendChild(dotEl);
+          turnsList.appendChild(divEl);
+        }
+        if (turnsList.children.length > 0) {
+          var divEl = document.createElement('div');
+          divEl.className = 'turn-end-divider';
+          var dotEl = document.createElement('span');
+          dotEl.className = 'turn-end-dot';
+          divEl.appendChild(dotEl);
+          turnsList.appendChild(divEl);
+        }
         var turnEl = document.createElement('article');
         turnEl.className = 'turn-block';
         state.activeTurnEl = turnEl;
@@ -5173,6 +5243,14 @@
         syncTopControlsUI();
         welcomeBanner.classList.add('hidden');
 
+        if (turnsList.children.length > 0) {
+          var divEl = document.createElement('div');
+          divEl.className = 'turn-end-divider';
+          var dotEl = document.createElement('span');
+          dotEl.className = 'turn-end-dot';
+          divEl.appendChild(dotEl);
+          turnsList.appendChild(divEl);
+        }
         var turnEl = document.createElement('article');
         turnEl.className = 'turn-block';
         state.activeTurnEl = turnEl;
