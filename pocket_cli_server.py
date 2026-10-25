@@ -91,6 +91,8 @@ except ImportError:
 
     prompt_master = _PromptMasterFallback()  # type: ignore
 
+import model_failover  # noqa: E402  (shared quota-aware model failover with bot.py)
+
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO").upper(),
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -387,6 +389,9 @@ def resolve_model_and_effort(prompt_text: str, requested_model: str = "auto") ->
         "opus": ("claude-opus-5-5-high", "high"),
         "opus-high": ("claude-opus-5-5-high", "high"),
         "claude-opus-5-5-high": ("claude-opus-5-5-high", "high"),
+        "sonnet": ("claude-sonnet-5-5-medium", "medium"),
+        "sonnet-high": ("claude-sonnet-5-5-high", "high"),
+        "gpt-oss": ("gpt-oss-120b-medium", "medium"),
     }
     if req in shorthand_map:
         return shorthand_map[req]
@@ -1319,6 +1324,10 @@ class PocketCLIState:
         resolved_conv_id = active_conv_id
         mastered = current_prompt
         pass_index = 0
+        # Quota-aware failover state (shared with Discord bot via model_failover state file)
+        failover_override: tuple[str, str] | None = None
+        tried_models: list[str] = []
+        first_requested_model = ""
 
         while True:
             pass_index += 1
@@ -1326,6 +1335,20 @@ class PocketCLIState:
             self._fold_in_requested = False
 
             resolved_model, resolved_effort = resolve_model_and_effort(current_prompt, requested_model)
+            if not first_requested_model:
+                first_requested_model = resolved_model
+            if failover_override:
+                resolved_model, resolved_effort = failover_override
+            else:
+                wanted_model = resolved_model
+                resolved_model, resolved_effort = model_failover.pick_available(resolved_model, resolved_effort)
+                if resolved_model != wanted_model:
+                    send(
+                        {
+                            "type": "tool",
+                            "name": f"{model_failover.friendly_name(wanted_model)} quota maxed → using {model_failover.friendly_name(resolved_model)}",
+                        }
+                    )
             if enhance:
                 mastered = prompt_master.master_user_prompt(
                     raw_prompt=current_prompt,
@@ -1533,6 +1556,31 @@ class PocketCLIState:
             if self._cancel_requested:
                 break
 
+            # Quota maxed on this model -> record it and transparently retry on the next available pool
+            stderr_blob = "\n".join(stderr_lines)
+            if (
+                not final_response
+                and not accumulated
+                and not timed_out
+                and model_failover.is_quota_error(stderr_blob)
+                and len(tried_models) < 6
+            ):
+                tried_models.append(resolved_model)
+                nxt = model_failover.next_after_quota(
+                    resolved_model, stderr_blob, resolved_effort, tried=tuple(tried_models)
+                )
+                if nxt:
+                    logger.warning("Pocket CLI quota reached on %s; failing over to %s", resolved_model, nxt[0])
+                    send(
+                        {
+                            "type": "tool",
+                            "name": f"{model_failover.friendly_name(resolved_model)} quota maxed → switching to {model_failover.friendly_name(nxt[0])}",
+                        }
+                    )
+                    failover_override = nxt
+                    continue
+                stderr_lines = ["Every model quota is maxed out right now:"] + model_failover.status_lines()
+
             # Case 1: User sent another message before any mutating tool ran (or tapped Merge Now)
             if self._fold_in_requested:
                 folded_notes = self.pop_btw_notes()
@@ -1581,6 +1629,12 @@ class PocketCLIState:
             else:
                 final_text = "(No response returned by agy)"
 
+        if first_requested_model and resolved_model != first_requested_model and final_text:
+            fo_note = model_failover.failover_note(first_requested_model, resolved_model)
+            if fo_note:
+                send({"type": "chunk", "text": f"\n\n{fo_note}"})
+                final_text = f"{final_text}\n\n{fo_note}"
+
         receipt = prompt_master.validate_turn_output(
             raw_in,
             mastered,
@@ -1614,6 +1668,7 @@ class PocketCLIState:
             "type": "done",
             "mode": "agy",
             "response": final_text,
+            "model": resolved_model,
             "conversation_id": self.current_conv_id,
             "receipt": receipt,
             "duration_ms": elapsed_ms,
@@ -1768,6 +1823,7 @@ class PocketCLIState:
         truncation_notified = False
         collected_lines: list[str] = []
         eof_streams = 0
+        held_blank_stdout = False  # blank stdout line that may just be the sentinel's leading newline
 
         try:
             while eof_streams < 2:
@@ -1777,6 +1833,7 @@ class PocketCLIState:
                     continue
 
                 if stream_name == "stdout" and ln.startswith(f"{sentinel}:"):
+                    held_blank_stdout = False  # drop the separator newline injected before the sentinel
                     new_pwd = ln.split(":", 1)[1].strip()
                     if new_pwd and Path(new_pwd).is_dir():
                         resolved_pwd = str(Path(new_pwd).resolve())
@@ -1786,9 +1843,16 @@ class PocketCLIState:
                             self._persist_runtime_context()
                     continue
 
-                # Skip empty trailing newline injected right before the PWD sentinel
-                if stream_name == "stdout" and ln == "" and emitted_count == 0 and not collected_lines:
-                    continue
+                if stream_name == "stdout":
+                    if held_blank_stdout:
+                        held_blank_stdout = False
+                        if emitted_count < MAX_SHELL_STREAM_LINES:
+                            send({"type": "stdout", "line": ""})
+                            collected_lines.append("")
+                            emitted_count += 1
+                    if ln == "":
+                        held_blank_stdout = True
+                        continue
 
                 safe_ln = scrub_secrets(ln)
                 if emitted_count < MAX_SHELL_STREAM_LINES:
