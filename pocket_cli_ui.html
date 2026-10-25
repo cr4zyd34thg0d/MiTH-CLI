@@ -492,6 +492,52 @@
       background-color: var(--accent-green);
     }
 
+    /* 1-Tap PWA App Refresh Button (Left of Auto Model Picker) */
+    .app-refresh-btn {
+      appearance: none;
+      width: 26px;
+      height: 26px;
+      padding: 0;
+      border-radius: 6px;
+      border: 1px solid var(--border-hairline);
+      background-color: var(--bg-surface);
+      color: var(--text-secondary);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      touch-action: manipulation;
+      transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+    }
+
+    .app-refresh-btn:active {
+      transform: scale(0.92);
+      background-color: var(--bg-surface-active);
+      color: #38BDF8;
+      border-color: rgba(56, 189, 248, 0.45);
+    }
+
+    .app-refresh-btn svg {
+      width: 13px;
+      height: 13px;
+      stroke: currentColor;
+    }
+
+    @keyframes spinRefresh {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    .app-refresh-btn.spinning {
+      color: #C084FC;
+      border-color: rgba(192, 132, 252, 0.5);
+    }
+
+    .app-refresh-btn.spinning svg {
+      animation: spinRefresh 0.55s linear infinite;
+    }
+
     /* Compact Model Select Wrapper (keeps native <select> at 16px to prevent iOS zoom) */
     .model-picker-wrap {
       position: relative;
@@ -2173,6 +2219,11 @@
           <nav id="session-tabs-bar" class="session-tabs-bar" aria-label="Conversation Tabs"></nav>
 
           <div class="controls-cluster">
+            <button type="button" id="btn-refresh-app" class="app-refresh-btn" title="Refresh App & Pull Latest Updates" aria-label="Refresh App">
+              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M13.5 8A5.5 5.5 0 1 1 11.89 4.11L13.5 5.5M13.5 2.5V5.5H10.5" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
             <div class="model-picker-wrap" title="Select AI Model">
               <span id="model-select-label">Auto</span>
               <svg class="model-picker-chevron" viewBox="0 0 12 12" fill="none" aria-hidden="true">
@@ -2760,6 +2811,18 @@
          ======================================================================= */
       var bridgeDropdownMenu = document.getElementById('bridge-dropdown-menu');
       var dropdownCwdPath = document.getElementById('dropdown-cwd-path');
+      var btnRefreshApp = document.getElementById('btn-refresh-app');
+
+      if (btnRefreshApp) {
+        btnRefreshApp.addEventListener('click', function () {
+          btnRefreshApp.classList.add('spinning');
+          saveTabsState();
+          showToast('Refreshing MiTH CLI...');
+          setTimeout(function () {
+            window.location.replace(window.location.pathname + '?v=' + Date.now());
+          }, 160);
+        });
+      }
 
       function syncTopControlsUI() {
         // CWD + Dropdown Badge
