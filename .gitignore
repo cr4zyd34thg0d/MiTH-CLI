@@ -43,3 +43,42 @@ Thumbs.db
 *.bak
 *.tmp
 *.log
+
+# ==============================================================================
+# 4. ALLOWLIST — this repo is ONLY the MiTH CLI web app.
+#    Ignore everything by default, then explicitly un-ignore the app files.
+#    Anything else (studio, music, finance/trading, bot, agent files) that lands in
+#    this folder stays untracked and can never be committed by `git add -A` / `git add .`.
+#    To publish a new app file, add a `!path` line below on purpose.
+#    (Keep this section LAST: later rules override the earlier denylist above.)
+# ==============================================================================
+*
+
+# Directories must be un-ignored so git descends into them
+!docs/
+!docs/assets/
+!tests/
+
+# Repo metadata & docs
+!.gitignore
+!README.md
+!requirements.txt
+!.env.example
+
+# Application code
+!pocket_cli_server.py
+!pocket_cli_ui.html
+!model_failover.py
+!secrets_keychain.py
+!start_pocket_cli.sh
+
+# Tests
+!tests/test_pocket_cli.py
+
+# Icons & README screenshots
+!mith_cli_icon.png
+!mith_cli_icon_180.png
+!mith_cli_icon_alt_mech.png
+!docs/assets/mith_cli_logo_flat.png
+!docs/assets/mith_cli_logo_mech.png
+!docs/assets/mith_cli_software_ui.png
