@@ -591,6 +591,12 @@
       border-color: rgba(56, 189, 248, 0.45);
     }
 
+    .app-refresh-btn.push-active {
+      color: #10B981 !important;
+      background-color: rgba(16, 185, 129, 0.14) !important;
+      border-color: rgba(16, 185, 129, 0.4) !important;
+    }
+
     .app-refresh-btn svg {
       width: 13px;
       height: 13px;
@@ -2515,6 +2521,12 @@
           <nav id="session-tabs-bar" class="session-tabs-bar" aria-label="Conversation Tabs"></nav>
 
           <div class="controls-cluster">
+            <button type="button" id="btn-push-top" class="app-refresh-btn" title="Toggle native iOS Lock Screen Alerts" aria-label="Toggle native iOS Lock Screen Alerts">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:13px;height:13px;">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
             <button type="button" id="btn-refresh-app" class="app-refresh-btn" title="Refresh App & Pull Latest Updates" aria-label="Refresh App">
               <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
                 <path d="M13.5 8A5.5 5.5 0 1 1 11.89 4.11L13.5 5.5M13.5 2.5V5.5H10.5" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"/>
@@ -2549,6 +2561,12 @@
             <button type="button" id="btn-sync" class="pill-toggle" aria-pressed="false" title="Mirror turns to Discord #iphone-cli">
               <span class="sync-dot" aria-hidden="true"></span>
               <span id="btn-sync-text">Discord OFF</span>
+            </button>
+          </div>
+          <div class="bridge-dropdown-row">
+            <span>Lock Screen Alerts</span>
+            <button type="button" id="btn-push-toggle" class="pill-toggle" aria-pressed="false" title="Native iOS Lock Screen & Banner Notifications">
+              🔔 Alerts OFF
             </button>
           </div>
           <div class="bridge-dropdown-row" style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 6px; margin-top: 2px;">
@@ -3220,6 +3238,138 @@
           }, 160);
         });
       }
+
+      /* =======================================================================
+         Native iOS Lock Screen & Web Push Notifications (ServiceWorker + VAPID)
+         ======================================================================= */
+      var btnPushTop = document.getElementById('btn-push-top');
+      var btnPushToggle = document.getElementById('btn-push-toggle');
+      var swRegistration = null;
+      var pushSubscribed = false;
+
+      function urlBase64ToUint8Array(base64String) {
+        var padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+        var base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+        var rawData = window.atob(base64);
+        var outputArray = new Uint8Array(rawData.length);
+        for (var i = 0; i < rawData.length; ++i) {
+          outputArray[i] = rawData.charCodeAt(i);
+        }
+        return outputArray;
+      }
+
+      function updatePushUI(active) {
+        pushSubscribed = !!active;
+        if (btnPushTop) {
+          if (pushSubscribed) {
+            btnPushTop.classList.add('push-active');
+            btnPushTop.title = 'Lock Screen Alerts: ON (Tap to test)';
+          } else {
+            btnPushTop.classList.remove('push-active');
+            btnPushTop.title = 'Enable native iOS Lock Screen Alerts';
+          }
+        }
+        if (btnPushToggle) {
+          if (pushSubscribed) {
+            btnPushToggle.classList.add('sync-active');
+            btnPushToggle.textContent = '🔔 Alerts ON';
+            btnPushToggle.setAttribute('aria-pressed', 'true');
+          } else {
+            btnPushToggle.classList.remove('sync-active');
+            btnPushToggle.textContent = '🔔 Alerts OFF';
+            btnPushToggle.setAttribute('aria-pressed', 'false');
+          }
+        }
+      }
+
+      function initServiceWorkerAndPush() {
+        if (!('serviceWorker' in navigator)) return;
+        navigator.serviceWorker.register('/sw.js').then(function (reg) {
+          swRegistration = reg;
+          if (!('PushManager' in window)) return;
+          return reg.pushManager.getSubscription();
+        }).then(function (sub) {
+          updatePushUI(!!sub);
+        }).catch(function (err) {
+          console.warn('SW/Push init:', err);
+        });
+      }
+
+      function togglePushAlerts() {
+        triggerHaptic('light');
+        if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+          showToast('Lock Screen push requires adding to iOS Home Screen first');
+          return;
+        }
+
+        if (pushSubscribed) {
+          showToast('Firing test Lock Screen notification...');
+          apiFetch('/api/push/test', { method: 'POST' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+              if (d && d.ok) {
+                showToast('Test alert sent! Check your Lock Screen');
+                triggerHaptic('success');
+              }
+            })
+            .catch(function () {
+              showToast('Test alert failed');
+            });
+          return;
+        }
+
+        Notification.requestPermission().then(function (perm) {
+          if (perm !== 'granted') {
+            showToast('Notification permission denied in iOS Settings');
+            updatePushUI(false);
+            return;
+          }
+          showToast('Arming native Lock Screen alerts...');
+          apiFetch('/api/push/public-key')
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+              if (!data || !data.ok || !data.publicKey) {
+                throw new Error('VAPID public key unavailable');
+              }
+              var appServerKey = urlBase64ToUint8Array(data.publicKey);
+              var regPromise = swRegistration
+                ? Promise.resolve(swRegistration)
+                : navigator.serviceWorker.ready;
+              return regPromise.then(function (reg) {
+                swRegistration = reg;
+                return reg.pushManager.subscribe({
+                  userVisibleOnly: true,
+                  applicationServerKey: appServerKey
+                });
+              });
+            })
+            .then(function (sub) {
+              return apiFetch('/api/push/subscribe', {
+                method: 'POST',
+                body: JSON.stringify({ subscription: sub })
+              });
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+              if (d && d.ok) {
+                updatePushUI(true);
+                triggerHaptic('success');
+                showToast('🔔 Lock Screen alerts active! Confirmation sent.');
+              } else {
+                throw new Error((d && d.error) || 'Failed to register subscription');
+              }
+            })
+            .catch(function (err) {
+              console.error('Push error:', err);
+              showToast('Push setup error: ' + (err.message || 'unknown'));
+            });
+        });
+      }
+
+      if (btnPushTop) btnPushTop.addEventListener('click', togglePushAlerts);
+      if (btnPushToggle) btnPushToggle.addEventListener('click', togglePushAlerts);
+
+      initServiceWorkerAndPush();
 
       function syncTopControlsUI() {
         // CWD + Dropdown Badge

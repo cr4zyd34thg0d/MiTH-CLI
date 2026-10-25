@@ -207,6 +207,55 @@ PWA_MANIFEST: dict[str, Any] = {
     ],
 }
 
+SW_JS: str = """// MiTH CLI Native iOS & Web Push Service Worker
+self.addEventListener('install', function (e) {
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', function (e) {
+  e.waitUntil(self.clients.claim());
+});
+
+self.addEventListener('push', function (e) {
+  var payload = {};
+  try {
+    payload = e.data ? e.data.json() : {};
+  } catch (_) {
+    payload = { title: 'MiTH CLI', body: e.data ? e.data.text() : 'Turn complete' };
+  }
+  var title = payload.title || 'MiTH CLI • Turn Complete';
+  var options = {
+    body: payload.body || 'Your command has finished.',
+    icon: '/apple-touch-icon.png?v=10',
+    badge: '/apple-touch-icon.png?v=10',
+    tag: payload.tag || ('turn-' + Date.now()),
+    renotify: true,
+    data: {
+      url: payload.url || '/cli'
+    }
+  };
+  e.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', function (e) {
+  e.notification.close();
+  var targetUrl = (e.notification.data && e.notification.data.url) || '/cli';
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clients) {
+      for (var i = 0; i < clients.length; i++) {
+        var client = clients[i];
+        if ('focus' in client) {
+          return client.focus();
+        }
+      }
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(targetUrl);
+      }
+    })
+  );
+});
+"""
+
 
 def _collect_known_secret_values() -> list[str]:
     """Collect active secret values from environment and `.env` for exact-match redaction."""
@@ -693,6 +742,8 @@ class PocketCLIState:
             "conversation_id": "",
             "cwd": "",
             "app_conv_bridges": {},
+            "vapid": {},
+            "push_subscriptions": [],
         }
 
     def _restore_runtime_context(self, *, initial_cwd: Path | str | None = None) -> None:
@@ -737,6 +788,8 @@ class PocketCLIState:
                 raw.setdefault("sessions", [])
                 raw.setdefault("active_pin", None)
                 raw.setdefault("request_timestamps", [])
+                raw.setdefault("vapid", {})
+                raw.setdefault("push_subscriptions", [])
                 return raw
         except (OSError, json.JSONDecodeError):
             pass
@@ -1031,6 +1084,127 @@ class PocketCLIState:
                 logger.warning("Discord #iphone-cli sync skipped: %s", scrub_secrets(str(exc)))
 
         threading.Thread(target=_worker, name="pocket-discord-sync", daemon=True).start()
+
+    def get_or_create_vapid(self) -> tuple[str, str]:
+        """
+        Return (public_key_b64, private_pem_str).
+        Generates and persists an elliptic-curve (P-256) VAPID keypair in .pocket_cli_sessions.json.
+        """
+        with self._state_lock:
+            store = self._load_store_unlocked()
+            vapid_info = store.get("vapid") or {}
+            priv_pem = str(vapid_info.get("private_pem") or "").strip()
+            pub_b64 = str(vapid_info.get("public_key") or "").strip()
+
+            if priv_pem and pub_b64:
+                return pub_b64, priv_pem
+
+            from py_vapid import Vapid  # type: ignore[import-untyped]
+            from cryptography.hazmat.primitives import serialization  # type: ignore[import-untyped]
+
+            v = Vapid()
+            v.generate_keys()
+            priv_pem = v.private_pem().decode("utf-8")
+            raw_pub = v.public_key.public_bytes(
+                encoding=serialization.Encoding.X962,
+                format=serialization.PublicFormat.UncompressedPoint,
+            )
+            pub_b64 = base64.urlsafe_b64encode(raw_pub).rstrip(b"=").decode("ascii")
+
+            store["vapid"] = {"private_pem": priv_pem, "public_key": pub_b64}
+            self._write_store_unlocked(store)
+            return pub_b64, priv_pem
+
+    def save_push_subscription(self, sub: dict[str, Any]) -> None:
+        endpoint = str(sub.get("endpoint") or "").strip()
+        if not endpoint:
+            return
+        with self._state_lock:
+            store = self._load_store_unlocked()
+            subs: list[dict[str, Any]] = list(store.get("push_subscriptions", []))
+            subs = [s for s in subs if isinstance(s, dict) and s.get("endpoint") != endpoint]
+            subs.append(sub)
+            store["push_subscriptions"] = subs
+            self._write_store_unlocked(store)
+
+    def remove_push_subscription(self, endpoint: str) -> None:
+        if not endpoint:
+            return
+        with self._state_lock:
+            store = self._load_store_unlocked()
+            subs: list[dict[str, Any]] = list(store.get("push_subscriptions", []))
+            subs = [s for s in subs if isinstance(s, dict) and s.get("endpoint") != endpoint]
+            store["push_subscriptions"] = subs
+            self._write_store_unlocked(store)
+
+    def send_push_notification_async(
+        self,
+        title: str,
+        body: str,
+        *,
+        tag: str = "turn",
+        url: str = "/cli",
+    ) -> None:
+        """Asynchronously dispatch encrypted VAPID Web Push notification to all subscribed iOS/desktop devices."""
+        def _worker() -> None:
+            try:
+                pub_b64, priv_pem = self.get_or_create_vapid()
+                with self._state_lock:
+                    store = self._load_store_unlocked()
+                    subs = list(store.get("push_subscriptions", []))
+
+                if not subs:
+                    return
+
+                from py_vapid import Vapid  # type: ignore[import-untyped]
+                from pywebpush import webpush, WebPushException  # type: ignore[import-untyped]
+
+                v_inst = Vapid.from_pem(priv_pem.encode("utf-8"))
+                claims = {"sub": "mailto:devon@mith-studio.local"}
+                payload_str = json.dumps({
+                    "title": title,
+                    "body": body,
+                    "tag": tag,
+                    "url": url,
+                    "timestamp": int(time.time() * 1000),
+                })
+
+                dead_endpoints: list[str] = []
+
+                for sub in subs:
+                    if not isinstance(sub, dict) or not sub.get("endpoint"):
+                        continue
+                    try:
+                        webpush(
+                            subscription_info=sub,
+                            data=payload_str,
+                            vapid_private_key=v_inst,
+                            vapid_claims=claims,
+                            ttl=3600,
+                            timeout=8,
+                        )
+                        logger.info("WebPush dispatched successfully to %s", str(sub.get("endpoint"))[:45])
+                    except WebPushException as w_exc:
+                        code = getattr(getattr(w_exc, "response", None), "status_code", None)
+                        logger.warning("WebPush failed (status=%s): %s", code, w_exc)
+                        if code in (404, 410):
+                            dead_endpoints.append(str(sub.get("endpoint")))
+                    except Exception as p_exc:
+                        logger.warning("WebPush transport exception: %s", p_exc)
+
+                if dead_endpoints:
+                    with self._state_lock:
+                        store = self._load_store_unlocked()
+                        current_subs = store.get("push_subscriptions", [])
+                        store["push_subscriptions"] = [
+                            s for s in current_subs
+                            if isinstance(s, dict) and s.get("endpoint") not in dead_endpoints
+                        ]
+                        self._write_store_unlocked(store)
+            except Exception as exc:
+                logger.warning("WebPush dispatcher error: %s", exc)
+
+        threading.Thread(target=_worker, name="pocket-webpush-worker", daemon=True).start()
 
     def _register_proc(self, proc: subprocess.Popen[str]) -> None:
         with self._proc_lock:
@@ -1426,6 +1600,16 @@ class PocketCLIState:
                 model=resolved_model,
             )
 
+        try:
+            summary = final_text.strip().split("\n")[0].strip()
+            if len(summary) > 110:
+                summary = summary[:107] + "..."
+            push_title = "⚡ MiTH CLI • Turn Complete"
+            push_body = f"{summary} ({elapsed_ms / 1000:.1f}s)" if summary else f"Turn finished in {elapsed_ms / 1000:.1f}s"
+            self.send_push_notification_async(push_title, push_body, tag=f"turn-{self.current_conv_id[:8]}")
+        except Exception:
+            pass
+
         done_payload: dict[str, Any] = {
             "type": "done",
             "mode": "agy",
@@ -1657,6 +1841,16 @@ class PocketCLIState:
                 cwd=self.current_cwd,
             )
 
+        try:
+            out_first = (combined_output.strip().split("\n")[0] if combined_output.strip() else f"Exit {rc}").strip()
+            if len(out_first) > 110:
+                out_first = out_first[:107] + "..."
+            push_title = "💻 MiTH CLI • Shell Finished" if rc == 0 else f"❌ MiTH CLI • Shell Exit {rc}"
+            push_body = f"$ {cmd_str[:40]} -> {out_first} ({elapsed_ms / 1000:.1f}s)"
+            self.send_push_notification_async(push_title, push_body, tag="shell-turn")
+        except Exception:
+            pass
+
         done_payload: dict[str, Any] = {
             "type": "done",
             "mode": "shell",
@@ -1870,6 +2064,21 @@ class PocketCLIHandler(BaseHTTPRequestHandler):
                 "application/manifest+json; charset=utf-8",
                 cache_control="no-cache",
             )
+            return
+
+        if path == "/sw.js":
+            self._send_bytes(
+                HTTPStatus.OK,
+                SW_JS.encode("utf-8"),
+                "application/javascript; charset=utf-8",
+                cache_control="no-cache, no-store, must-revalidate",
+                extra_headers={"Service-Worker-Allowed": "/"},
+            )
+            return
+
+        if path == "/api/push/public-key":
+            pub_key, _ = self.server.state.get_or_create_vapid()
+            self._send_json(HTTPStatus.OK, {"ok": True, "publicKey": pub_key})
             return
 
         if path == "/icon.svg":
@@ -2387,6 +2596,48 @@ class PocketCLIHandler(BaseHTTPRequestHandler):
                     "size_bytes": len(file_bytes),
                 },
             )
+            return
+
+        if path == "/api/push/subscribe":
+            if not self._require_auth():
+                return
+            body = self._read_json_body()
+            if body is None:
+                return
+            sub = body.get("subscription")
+            if not isinstance(sub, dict) or not sub.get("endpoint"):
+                self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": "Invalid subscription object."})
+                return
+            state.save_push_subscription(sub)
+            state.send_push_notification_async(
+                "🔔 MiTH CLI Alerts Armed",
+                "Lock Screen notifications are active. You'll receive alerts when commands finish.",
+                tag="welcome",
+            )
+            self._send_json(HTTPStatus.OK, {"ok": True, "subscribed": True})
+            return
+
+        if path == "/api/push/unsubscribe":
+            if not self._require_auth():
+                return
+            body = self._read_json_body()
+            if body is None:
+                return
+            endpoint = str(body.get("endpoint") or "").strip()
+            if endpoint:
+                state.remove_push_subscription(endpoint)
+            self._send_json(HTTPStatus.OK, {"ok": True, "subscribed": False})
+            return
+
+        if path == "/api/push/test":
+            if not self._require_auth():
+                return
+            state.send_push_notification_async(
+                "⚡ MiTH CLI • Test Alert",
+                "Lock Screen notifications are functioning perfectly!",
+                tag="test",
+            )
+            self._send_json(HTTPStatus.OK, {"ok": True, "sent": True})
             return
 
         if path == "/api/cancel":
