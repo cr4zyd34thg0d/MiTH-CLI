@@ -3282,14 +3282,69 @@
         }
       }
 
+      function completePushSubscription(silent) {
+        return apiFetch('/api/push/public-key')
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (!data || !data.ok || !data.publicKey) {
+              throw new Error('VAPID public key unavailable');
+            }
+            var appServerKey = urlBase64ToUint8Array(data.publicKey);
+            return navigator.serviceWorker.register('/sw.js')
+              .then(function () { return navigator.serviceWorker.ready; })
+              .then(function (readyReg) {
+                swRegistration = readyReg;
+                return readyReg.pushManager.subscribe({
+                  userVisibleOnly: true,
+                  applicationServerKey: appServerKey
+                });
+              });
+          })
+          .then(function (sub) {
+            var subPayload = (sub && typeof sub.toJSON === 'function') ? sub.toJSON() : sub;
+            return apiFetch('/api/push/subscribe', {
+              method: 'POST',
+              body: JSON.stringify({ subscription: subPayload })
+            });
+          })
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (d && d.ok) {
+              updatePushUI(true);
+              if (!silent) {
+                triggerHaptic('success');
+                showToast('🔔 Lock Screen alerts active! Confirmation sent.');
+              }
+              return true;
+            }
+            throw new Error((d && d.error) || 'Failed to register subscription');
+          });
+      }
+
       function initServiceWorkerAndPush() {
         if (!('serviceWorker' in navigator)) return;
-        navigator.serviceWorker.register('/sw.js').then(function (reg) {
+        navigator.serviceWorker.register('/sw.js').then(function () {
+          return navigator.serviceWorker.ready;
+        }).then(function (reg) {
           swRegistration = reg;
-          if (!('PushManager' in window)) return;
+          if (!('PushManager' in window)) return null;
           return reg.pushManager.getSubscription();
         }).then(function (sub) {
-          updatePushUI(!!sub);
+          if (sub) {
+            var subPayload = (sub && typeof sub.toJSON === 'function') ? sub.toJSON() : sub;
+            apiFetch('/api/push/subscribe', {
+              method: 'POST',
+              body: JSON.stringify({ subscription: subPayload })
+            }).catch(function () {});
+            updatePushUI(true);
+          } else if ('Notification' in window && Notification.permission === 'granted') {
+            // User already tapped Allow on iOS — auto-complete subscription now that SW is ready
+            completePushSubscription(false).catch(function () {
+              updatePushUI(false);
+            });
+          } else {
+            updatePushUI(false);
+          }
         }).catch(function (err) {
           console.warn('SW/Push init:', err);
         });
@@ -3308,7 +3363,7 @@
             .then(function (r) { return r.json(); })
             .then(function (d) {
               if (d && d.ok) {
-                showToast('Test alert sent! Check your Lock Screen');
+                showToast('Test alert sent! Lock your phone or check notifications');
                 triggerHaptic('success');
               }
             })
@@ -3325,44 +3380,10 @@
             return;
           }
           showToast('Arming native Lock Screen alerts...');
-          apiFetch('/api/push/public-key')
-            .then(function (r) { return r.json(); })
-            .then(function (data) {
-              if (!data || !data.ok || !data.publicKey) {
-                throw new Error('VAPID public key unavailable');
-              }
-              var appServerKey = urlBase64ToUint8Array(data.publicKey);
-              var regPromise = swRegistration
-                ? Promise.resolve(swRegistration)
-                : navigator.serviceWorker.ready;
-              return regPromise.then(function (reg) {
-                swRegistration = reg;
-                return reg.pushManager.subscribe({
-                  userVisibleOnly: true,
-                  applicationServerKey: appServerKey
-                });
-              });
-            })
-            .then(function (sub) {
-              return apiFetch('/api/push/subscribe', {
-                method: 'POST',
-                body: JSON.stringify({ subscription: sub })
-              });
-            })
-            .then(function (r) { return r.json(); })
-            .then(function (d) {
-              if (d && d.ok) {
-                updatePushUI(true);
-                triggerHaptic('success');
-                showToast('🔔 Lock Screen alerts active! Confirmation sent.');
-              } else {
-                throw new Error((d && d.error) || 'Failed to register subscription');
-              }
-            })
-            .catch(function (err) {
-              console.error('Push error:', err);
-              showToast('Push setup error: ' + (err.message || 'unknown'));
-            });
+          completePushSubscription(false).catch(function (err) {
+            console.error('Push error:', err);
+            showToast('Push setup error: ' + (err.message || 'unknown'));
+          });
         });
       }
 
@@ -3802,20 +3823,21 @@
       // to trigger the native "Save Password to Apple Passwords?" prompt.
 
       /* =======================================================================
-         Native Browser Link Opener (iOS Safari Breakout & External Tab Opener)
-         Forces external web links to bust out of iOS Standalone PWA container
-         into native MobileSafari via x-safari-https:, or new tabs on desktop.
+         Default Browser Link Opener (Google Chrome on iOS & External Tab Opener)
+         Forces external web links on iOS to break out of the standalone PWA
+         container and launch directly in Google Chrome (googlechromes://).
          ======================================================================= */
       function openExternalInNativeBrowser(url) {
         if (!url) return;
-        var isIosStandalone = !!(window.navigator.standalone || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches));
         var isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 
-        if (isIos && isIosStandalone && url.indexOf('https://') === 0) {
-          showToast('Opening in Safari...');
-          var safariSchemeUrl = url.replace(/^https:/, 'x-safari-https:');
+        if (isIos && (url.indexOf('https://') === 0 || url.indexOf('http://') === 0)) {
+          showToast('Opening in Chrome...');
+          var chromeSchemeUrl = url.indexOf('https://') === 0
+            ? url.replace(/^https:\/\//i, 'googlechromes://')
+            : url.replace(/^http:\/\//i, 'googlechrome://');
           try {
-            window.location.href = safariSchemeUrl;
+            window.location.href = chromeSchemeUrl;
             return;
           } catch (_) {}
         }
