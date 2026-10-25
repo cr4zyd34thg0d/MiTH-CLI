@@ -3802,6 +3802,43 @@
       // to trigger the native "Save Password to Apple Passwords?" prompt.
 
       /* =======================================================================
+         Native Browser Link Opener (iOS Safari Breakout & External Tab Opener)
+         Forces external web links to bust out of iOS Standalone PWA container
+         into native MobileSafari via x-safari-https:, or new tabs on desktop.
+         ======================================================================= */
+      function openExternalInNativeBrowser(url) {
+        if (!url) return;
+        var isIosStandalone = !!(window.navigator.standalone || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches));
+        var isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
+        if (isIos && isIosStandalone && url.indexOf('https://') === 0) {
+          showToast('Opening in Safari...');
+          var safariSchemeUrl = url.replace(/^https:/, 'x-safari-https:');
+          try {
+            window.location.href = safariSchemeUrl;
+            return;
+          } catch (_) {}
+        }
+
+        showToast('Opening in browser...');
+        var win = window.open(url, '_blank', 'noopener,noreferrer');
+        if (!win || win.closed || typeof win.closed === 'undefined') {
+          window.location.href = url;
+        }
+      }
+
+      document.addEventListener('click', function (e) {
+        var link = e.target.closest('a.md-web-link, a[href^="http://"], a[href^="https://"]');
+        if (!link) return;
+        var href = link.getAttribute('href');
+        if (!href || href.indexOf('#') === 0 || href.indexOf('/cli') === 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        triggerHaptic('selection');
+        openExternalInNativeBrowser(href);
+      });
+
+      /* =======================================================================
          Zero-XSS Pure DOM Text / Markdown-Lite Renderer
          (100% textContent assignment — raw HTML string injection is NEVER used)
          ======================================================================= */
@@ -3862,6 +3899,12 @@
                 aEl.target = '_blank';
                 aEl.rel = 'noopener noreferrer';
                 aEl.textContent = lbl + ' \u2197';
+                aEl.addEventListener('click', function (ev) {
+                  ev.preventDefault();
+                  ev.stopPropagation();
+                  triggerHaptic('selection');
+                  openExternalInNativeBrowser(this.href);
+                });
                 parent.appendChild(aEl);
               } else {
                 var codeFallback = document.createElement('code');
