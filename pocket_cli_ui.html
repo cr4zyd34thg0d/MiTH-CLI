@@ -80,6 +80,65 @@
       display: none !important;
     }
 
+    /* Startup splash: shown from first paint until the login or workspace screen is visible,
+       so a slow/hung network call or a startup error can never leave a blank black screen. */
+    #boot-splash {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: var(--bg-base);
+      color: var(--text-secondary);
+      font-family: var(--font-sans);
+      padding: env(safe-area-inset-top) 24px env(safe-area-inset-bottom);
+    }
+
+    #boot-splash.gone {
+      display: none;
+    }
+
+    .boot-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      max-width: 320px;
+      text-align: center;
+    }
+
+    .boot-logo {
+      width: 64px;
+      height: 64px;
+      border-radius: 16px;
+    }
+
+    .boot-msg {
+      font-size: 14px;
+      line-height: 20px;
+    }
+
+    #boot-splash.stalled .boot-msg {
+      color: var(--text-primary);
+    }
+
+    .boot-retry {
+      appearance: none;
+      border: 1px solid var(--border-strong);
+      background-color: var(--bg-surface);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 15px;
+      padding: 10px 22px;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+
+    .boot-retry[hidden] {
+      display: none;
+    }
+
     /* =========================================================================
        1-Tap Discord Pairing Screen
        ========================================================================= */
@@ -2452,6 +2511,58 @@
   </style>
 </head>
 <body>
+  <div id="boot-splash" role="status" aria-live="polite">
+    <div class="boot-card">
+      <img src="/apple-touch-icon.png?v=11" alt="" class="boot-logo">
+      <div id="boot-msg" class="boot-msg">Connecting…</div>
+      <button type="button" id="boot-retry" class="boot-retry" hidden>Retry</button>
+    </div>
+  </div>
+  <!-- Startup watchdog. Deliberately a separate, dependency-free script that runs BEFORE the main app
+       script, so it still works if the main script throws or fails to parse. -->
+  <script>
+    (function () {
+      var splash = document.getElementById('boot-splash');
+      var msg = document.getElementById('boot-msg');
+      var retry = document.getElementById('boot-retry');
+      var startedAt = Date.now();
+
+      function screenVisible() {
+        var a = document.getElementById('auth-screen');
+        var w = document.getElementById('workspace-screen');
+        return !!((a && !a.classList.contains('hidden')) || (w && !w.classList.contains('hidden')));
+      }
+
+      function stall(text) {
+        if (!splash || splash.classList.contains('gone')) return;
+        splash.classList.add('stalled');
+        msg.textContent = text;
+        retry.hidden = false;
+      }
+
+      retry.addEventListener('click', function () {
+        window.location.replace(window.location.pathname + '?v=' + Date.now());
+      });
+
+      var timer = setInterval(function () {
+        if (screenVisible()) {
+          splash.classList.add('gone');
+          clearInterval(timer);
+          return;
+        }
+        // Backup only: the app's own 8s request timeout normally lands on a visible screen first.
+        if (Date.now() - startedAt > 10000) {
+          stall('Still connecting\u2026 make sure Tailscale (or your tunnel) is connected, then tap Retry.');
+        }
+      }, 250);
+
+      window.addEventListener('error', function (e) {
+        if (!screenVisible()) {
+          stall('MiTH CLI failed to start' + (e && e.message ? ': ' + e.message : '.') + ' Tap Retry.');
+        }
+      });
+    })();
+  </script>
   <div id="app">
     <!-- 1-Tap Direct & PIN Login Screen -->
     <main id="auth-screen" class="hidden" aria-label="Owner Login">
@@ -3625,7 +3736,12 @@
         syncViewportDock();
       }
 
+      var authCheckPromise = null;
+
       function checkAuthStatus() {
+        // Boot, `pageshow` and `visibilitychange` all call this at once on resume — share one request.
+        if (authCheckPromise) return authCheckPromise;
+
         var initialAuthErr = '';
         try {
           var params = new URLSearchParams(window.location.search || '');
@@ -3637,7 +3753,13 @@
           }
         } catch (_) {}
 
-        return apiFetch('/api/auth/status', { method: 'GET' })
+        // A hung connection (e.g. Tailscale still reconnecting) never rejects on its own, which used to
+        // leave both screens hidden = black screen. Abort after 8s so we always land on a visible screen.
+        var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+        var abortTimer = ctrl ? setTimeout(function () { try { ctrl.abort(); } catch (_) {} }, 8000) : null;
+        var fetchOpts = ctrl ? { method: 'GET', signal: ctrl.signal } : { method: 'GET' };
+
+        authCheckPromise = apiFetch('/api/auth/status', fetchOpts)
           .then(function (res) {
             if (res.status === 401) {
               showAuthScreen(initialAuthErr);
@@ -3678,8 +3800,16 @@
           })
           .catch(function () {
             liveDot.classList.add('offline');
-            showAuthScreen('Unable to reach Pocket CLI server. Check connection.');
+            // Brief network blip while already signed in: stay on the workspace instead of bouncing to login.
+            if (state.authenticated) return;
+            showAuthScreen('Unable to reach MiTH CLI server. Check your connection (is Tailscale connected?).');
+          })
+          .then(function () {
+            if (abortTimer) clearTimeout(abortTimer);
+            authCheckPromise = null;
           });
+
+        return authCheckPromise;
       }
 
       if (btnDirectConnect) {
