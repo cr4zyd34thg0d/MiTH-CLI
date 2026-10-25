@@ -79,7 +79,7 @@ except ImportError:
 
         @staticmethod
         def get_agent_hierarchy_info(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
-            return {"role": "agent", "tier": "primary"}
+            return {"role": "agent", "tier": "primary", "pod": "default"}
 
         @staticmethod
         def master_user_prompt(raw_prompt: str, **_kwargs: Any) -> str:
@@ -1153,13 +1153,15 @@ class PocketCLIState:
         """Asynchronously dispatch encrypted VAPID Web Push notification to all subscribed iOS/desktop devices."""
         def _worker() -> None:
             try:
-                pub_b64, priv_pem = self.get_or_create_vapid()
                 with self._state_lock:
                     store = self._load_store_unlocked()
                     subs = list(store.get("push_subscriptions", []))
 
+                # Nothing subscribed (push never enabled) -> do no work and never require pywebpush.
                 if not subs:
                     return
+
+                pub_b64, priv_pem = self.get_or_create_vapid()
 
                 from py_vapid import Vapid  # type: ignore[import-untyped]
                 from pywebpush import webpush, WebPushException  # type: ignore[import-untyped]
@@ -1366,8 +1368,8 @@ class PocketCLIState:
                         "raw": scrub_secrets(raw_in),
                         "clarified_intent": scrub_secrets(norm_in),
                         "agent_id": chosen_id,
-                        "tier": hier["tier"],
-                        "pod": hier["pod"],
+                        "tier": hier.get("tier", "primary"),
+                        "pod": hier.get("pod", "default"),
                         "model": resolved_model,
                         "effort": resolved_effort,
                     }
@@ -1411,7 +1413,9 @@ class PocketCLIState:
                 "--dangerously-skip-permissions",
             ]
             for extra_dir in AGY_EXTRA_DIRS:
-                argv.extend(["--add-dir", extra_dir])
+                # Only grant directories that actually exist on this machine (forks get none by default).
+                if Path(extra_dir).is_dir():
+                    argv.extend(["--add-dir", extra_dir])
             if active_conv_id:
                 argv.extend(["--conversation", active_conv_id])
 
@@ -2141,7 +2145,14 @@ class PocketCLIHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/push/public-key":
-            pub_key, _ = self.server.state.get_or_create_vapid()
+            try:
+                pub_key, _ = self.server.state.get_or_create_vapid()
+            except ImportError:
+                self._send_json(
+                    HTTPStatus.NOT_IMPLEMENTED,
+                    {"ok": False, "error": "Push alerts need the optional 'pywebpush' package (pip install pywebpush)."},
+                )
+                return
             self._send_json(HTTPStatus.OK, {"ok": True, "publicKey": pub_key})
             return
 

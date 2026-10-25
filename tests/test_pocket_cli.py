@@ -32,7 +32,11 @@ if str(BRIDGE_DIR) not in sys.path:
     sys.path.insert(0, str(BRIDGE_DIR))
 
 import pocket_cli_server as pcs  # noqa: E402
-import prompt_master  # noqa: E402
+
+# Use the exact `prompt_master` object the server bound: the real Stage-0 module on the author's
+# machine, or the server's built-in pass-through fallback on a fresh fork (where it isn't installed).
+prompt_master = pcs.prompt_master
+HAS_REAL_PROMPT_MASTER = getattr(prompt_master, "__name__", "") == "prompt_master"
 
 
 class PocketCLIServerTests(unittest.TestCase):
@@ -50,7 +54,7 @@ class PocketCLIServerTests(unittest.TestCase):
         self.ui_file.write_text("<!doctype html><title>Pocket CLI UI</title>", encoding="utf-8")
 
         self.audit_log = self.tmp_dir / "pipeline_audit.jsonl"
-        self._audit_patcher = patch.object(prompt_master, "PIPELINE_AUDIT_LOG", self.audit_log)
+        self._audit_patcher = patch.object(prompt_master, "PIPELINE_AUDIT_LOG", self.audit_log, create=True)
         self._audit_patcher.start()
 
         # Mock executable `agy` script emitting authentic `stream-json` lines
@@ -266,6 +270,10 @@ class PocketCLIServerTests(unittest.TestCase):
         self.assertIn("[REDACTED", cleaned)
 
     # --- (d) Stage-0 `prompt_master` Enhancement Event in `agy` Mode ---
+    @unittest.skipUnless(
+        HAS_REAL_PROMPT_MASTER,
+        "Optional Stage-0 `prompt_master` module not installed (forks use the built-in pass-through)",
+    )
     def test_d_stage0_enhancement_and_agy_streaming(self) -> None:
         tok = self._authenticate_and_get_token()
         status, hdrs, raw = self._request(
