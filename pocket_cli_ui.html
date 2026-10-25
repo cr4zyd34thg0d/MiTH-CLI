@@ -426,6 +426,49 @@
       background-color: var(--bg-surface-active);
     }
 
+    /* Logo-as-Menu Trigger (replaces the old ~/bridge badge) */
+    .brand-menu-btn {
+      appearance: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      height: 30px;
+      padding: 0 5px 0 3px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      background: transparent;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background-color 0.12s ease, border-color 0.12s ease, transform 0.08s ease;
+    }
+
+    .brand-menu-btn:active {
+      transform: scale(0.95);
+      background-color: var(--bg-surface-active);
+    }
+
+    .brand-menu-btn[aria-expanded="true"] {
+      background-color: var(--bg-surface);
+      border-color: var(--border-strong);
+    }
+
+    .brand-menu-chevron {
+      width: 10px;
+      height: 10px;
+      stroke: var(--text-muted);
+      transition: transform 0.16s ease, stroke 0.12s ease;
+    }
+
+    .brand-menu-btn[aria-expanded="true"] .brand-menu-chevron {
+      transform: rotate(180deg);
+      stroke: var(--text-primary);
+    }
+
+    /* Enhance or Discord mirror ON -> green chevron so non-default state is never invisible */
+    .brand-menu-btn.has-active-toggle .brand-menu-chevron {
+      stroke: var(--accent-green);
+    }
+
     /* ~/bridge Dropdown Popover Menu */
     .bridge-dropdown-menu {
       position: absolute;
@@ -2465,8 +2508,7 @@
           <span id="auth-hint-text">Enter your 6-digit PIN &bull; Save to Apple Passwords for Face ID / Touch ID</span>
         </p>
 
-        <iframe name="auth-password-sink" style="display:none;" aria-hidden="true"></iframe>
-        <form id="auth-login-form" class="code-entry-group" action="/cli" method="post" target="auth-password-sink">
+        <form id="auth-login-form" class="code-entry-group" method="post" autocomplete="on">
           <div class="auth-account-row">
             <span class="auth-account-tag">Owner Account</span>
             <input id="auth-username-input" type="text" name="username" autocomplete="username" value="MiTH" readonly aria-label="Account Username">
@@ -2501,10 +2543,13 @@
       <header class="top-bar">
         <div class="top-bar-inner">
           <div class="status-cluster">
-            <img src="/apple-touch-icon.png?v=10" alt="" class="brand-logo-img" aria-hidden="true">
+            <button type="button" id="brand-menu-btn" class="brand-menu-btn" aria-expanded="false" aria-haspopup="true" aria-label="MiTH CLI menu" title="Workspace, sync & security">
+              <img src="/apple-touch-icon.png?v=10" alt="" class="brand-logo-img" aria-hidden="true">
+              <svg class="brand-menu-chevron" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                <path d="M3 4.5L6 7.5L9 4.5" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
             <span id="live-dot" class="live-dot" aria-hidden="true"></span>
-            <span class="host-label">mith-cli</span>
-            <button type="button" id="cwd-badge" class="cwd-badge" aria-expanded="false" aria-haspopup="true" title="Tap for Enhance & Discord Sync settings">~/bridge &#9662;</button>
           </div>
 
           <nav id="session-tabs-bar" class="session-tabs-bar" aria-label="Conversation Tabs"></nav>
@@ -2883,7 +2928,7 @@
       var authError = document.getElementById('auth-error');
 
       var liveDot = document.getElementById('live-dot');
-      var cwdBadge = document.getElementById('cwd-badge');
+      var cwdBadge = document.getElementById('brand-menu-btn');
       var btnEnhance = document.getElementById('btn-enhance');
       var btnSync = document.getElementById('btn-sync');
       var modelSelect = document.getElementById('model-select');
@@ -3227,8 +3272,7 @@
       function syncTopControlsUI() {
         // CWD + Dropdown Badge
         var shortCwd = formatCwdShort(state.cwd);
-        cwdBadge.textContent = shortCwd + ' \u25BE';
-        cwdBadge.title = (state.cwd || '~/bridge') + ' (Tap for Enhance & Discord Sync)';
+        cwdBadge.title = 'MiTH CLI \u2022 ' + shortCwd + ' (Tap for Enhance, Discord Sync & Lock)';
         cwdBadge.classList.toggle('has-active-toggle', Boolean(state.enhance || state.syncDiscord));
         welcomeCwd.textContent = state.cwd || '~/bridge';
         if (dropdownCwdPath) {
@@ -3292,6 +3336,7 @@
       cwdBadge.addEventListener('click', function (e) {
         e.stopPropagation();
         if (!bridgeDropdownMenu) return;
+        triggerHaptic('selection');
         var isOpen = !bridgeDropdownMenu.classList.toggle('hidden');
         cwdBadge.setAttribute('aria-expanded', String(isOpen));
       });
@@ -3307,7 +3352,7 @@
 
       document.addEventListener('click', function (e) {
         if (!bridgeDropdownMenu || bridgeDropdownMenu.classList.contains('hidden')) return;
-        if (!bridgeDropdownMenu.contains(e.target) && e.target !== cwdBadge) {
+        if (!bridgeDropdownMenu.contains(e.target) && !cwdBadge.contains(e.target)) {
           bridgeDropdownMenu.classList.add('hidden');
           cwdBadge.setAttribute('aria-expanded', 'false');
         }
@@ -3652,12 +3697,15 @@
       });
 
       if (authLoginForm) {
-        authLoginForm.addEventListener('submit', function () {
+        // Never let the browser POST the PIN natively: only the JSON fetch to /api/auth/verify-code carries it.
+        authLoginForm.addEventListener('submit', function (e) {
+          e.preventDefault();
           submitVerifyCode();
         });
       }
 
-      btnVerifyCode.addEventListener('click', function () {
+      btnVerifyCode.addEventListener('click', function (e) {
+        e.preventDefault();
         submitVerifyCode();
       });
 
