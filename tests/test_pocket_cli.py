@@ -97,6 +97,7 @@ class PocketCLIServerTests(unittest.TestCase):
             tunnel_url_file=self.tunnel_file,
             initial_cwd=self.work_root,
             agy_bin_path=str(self.fake_agy),
+            owner_pin="7777",
         )
         self.server = pcs.PocketCLIServer(
             ("127.0.0.1", 0),

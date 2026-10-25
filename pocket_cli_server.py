@@ -1721,6 +1721,7 @@ class PocketCLIHandler(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Permissions-Policy", "microphone=(self)")
         self.send_header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
         self.send_header(
             "Content-Security-Policy",
@@ -2249,6 +2250,81 @@ class PocketCLIHandler(BaseHTTPRequestHandler):
                 HTTPStatus.OK,
                 {"ok": True, "session_token": tok_or_err, "cwd": state.current_cwd},
                 extra_headers={"Set-Cookie": cookie},
+            )
+            return
+
+        if path == "/api/auth/login":
+            length_str = self.headers.get("Content-Length") or "0"
+            try:
+                length = int(length_str)
+            except ValueError:
+                length = 0
+            if length < 0 or length > MAX_HTTP_BODY_BYTES:
+                self._send_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"ok": False, "error": "Payload too large."})
+                return
+            raw_form = self.rfile.read(length).decode("utf-8", errors="ignore") if length > 0 else ""
+            form_data = parse_qs(raw_form, keep_blank_values=True)
+            submitted = (
+                (form_data.get("password") or form_data.get("code") or [""])[0]
+            ).strip()
+            ok, tok_or_err, remaining = state.verify_pairing_code(submitted)
+            if not ok:
+                from urllib.parse import quote
+                err_msg = tok_or_err
+                if remaining > 0:
+                    err_msg = f"{tok_or_err} ({remaining} attempts left)"
+                redirect_html = (
+                    "<!DOCTYPE html><html lang='en'><head><meta charset='utf-8'>"
+                    "<title>MiTH CLI</title></head><body style='background:#09090B;'>"
+                    f"<script>window.location.replace('/cli?auth_error={quote(err_msg)}');</script>"
+                    "</body></html>"
+                ).encode("utf-8")
+                self._send_bytes(
+                    HTTPStatus.OK,
+                    redirect_html,
+                    "text/html; charset=utf-8",
+                    cache_control="no-store",
+                )
+                return
+
+            cookie = (
+                f"agy_pocket_session={tok_or_err}; Path=/; Max-Age={SESSION_TTL_SECONDS}; "
+                "HttpOnly; SameSite=Strict"
+            )
+            forwarded_proto = (self.headers.get("X-Forwarded-Proto") or "").strip().lower()
+            if forwarded_proto == "https":
+                cookie += "; Secure"
+
+            success_html = (
+                "<!DOCTYPE html><html lang='en'><head><meta charset='utf-8'>"
+                "<title>MiTH CLI</title></head><body style='background:#09090B;'>"
+                "<script>"
+                f"try {{ localStorage.setItem('agy_pocket_token_v2', {json.dumps(tok_or_err)}); }} catch (_) {{}}"
+                "window.location.replace('/cli');"
+                "</script></body></html>"
+            ).encode("utf-8")
+            self._send_bytes(
+                HTTPStatus.OK,
+                success_html,
+                "text/html; charset=utf-8",
+                cache_control="no-store",
+                extra_headers={"Set-Cookie": cookie},
+            )
+            return
+
+        if path == "/api/auth/logout":
+            if (self.headers.get("Content-Length") or "0") != "0":
+                try:
+                    n = min(int(self.headers.get("Content-Length") or "0"), MAX_HTTP_BODY_BYTES)
+                    if n > 0:
+                        self.rfile.read(n)
+                except ValueError:
+                    pass
+            clear_cookie = "agy_pocket_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict"
+            self._send_json(
+                HTTPStatus.OK,
+                {"ok": True},
+                extra_headers={"Set-Cookie": clear_cookie},
             )
             return
 
