@@ -30,6 +30,9 @@
       --accent-green: #10B981;
       --accent-green-tint: rgba(16, 185, 129, 0.12);
       --accent-green-border: rgba(16, 185, 129, 0.32);
+      --accent-purple: #C084FC;
+      --accent-purple-tint: rgba(192, 132, 252, 0.14);
+      --accent-purple-border: rgba(192, 132, 252, 0.35);
       --accent-amber: #F59E0B;
       --accent-amber-tint: rgba(245, 158, 11, 0.10);
       --accent-red: #EF4444;
@@ -236,7 +239,38 @@
     .code-entry-group {
       display: flex;
       flex-direction: column;
+      gap: 10px;
+    }
+
+    .auth-account-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
       gap: 8px;
+      background-color: var(--bg-base);
+      border: 1px solid var(--border-hairline);
+      border-radius: 9px;
+      padding: 6px 11px;
+    }
+
+    .auth-account-tag {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    #auth-username-input {
+      border: none;
+      background: transparent;
+      color: var(--accent-green);
+      font-family: var(--font-mono);
+      font-size: 16px;
+      font-weight: 600;
+      text-align: right;
+      outline: none;
+      width: 140px;
     }
 
     .code-label {
@@ -958,18 +992,22 @@
     }
 
     .agy-stream-pending {
-      color: var(--text-muted);
+      color: var(--accent-purple);
       font-size: 12px;
+      font-weight: 500;
       display: inline-flex;
       align-items: center;
       gap: 6px;
+      letter-spacing: -0.01em;
     }
 
     .stream-cursor {
       display: inline-block;
       width: 6px;
       height: 13px;
-      background-color: var(--accent-green);
+      background-color: var(--accent-purple);
+      box-shadow: 0 0 8px rgba(192, 132, 252, 0.65);
+      border-radius: 1px;
       vertical-align: -2px;
       margin-left: 2px;
       animation: pulseOpacity 0.9s steps(2, start) infinite;
@@ -1584,36 +1622,66 @@
     /* Live Follow-Up Message Pill inside active turn */
     .btw-note-pill {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      margin: 6px 0;
-      padding: 6px 10px;
+      flex-direction: column;
+      gap: 6px;
+      margin: 8px 0;
+      padding: 8px 10px;
       border-radius: 8px;
-      background-color: rgba(16, 185, 129, 0.10);
+      background-color: rgba(16, 185, 129, 0.08);
       border: 1px solid rgba(16, 185, 129, 0.28);
       color: #A7F3D0;
       font-family: var(--font-mono);
       font-size: 11.5px;
+      box-sizing: border-box;
+      width: 100%;
+    }
+
+    .btw-note-content {
+      word-break: break-word;
+      line-height: 1.45;
+      color: #D1FAE5;
+    }
+
+    .btw-note-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      width: 100%;
+      border-top: 1px solid rgba(16, 185, 129, 0.18);
+      padding-top: 5px;
+      margin-top: 2px;
     }
 
     .btw-note-meta {
-      font-size: 10px;
-      color: var(--text-muted);
-      flex-shrink: 0;
+      font-size: 10.5px;
+      color: #6EE7B7;
+      flex: 1 1 auto;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .btw-merge-btn {
-      padding: 3px 7px;
-      border-radius: 5px;
+      padding: 4px 10px;
+      border-radius: 6px;
       font-family: var(--font-mono);
-      font-size: 10px;
-      font-weight: 600;
-      background-color: rgba(56, 189, 248, 0.16);
-      border: 1px solid rgba(56, 189, 248, 0.40);
-      color: #7DD3FC;
+      font-size: 11px;
+      font-weight: 700;
+      background-color: rgba(56, 189, 248, 0.22);
+      border: 1px solid rgba(56, 189, 248, 0.55);
+      color: #38BDF8;
       cursor: pointer;
       flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      touch-action: manipulation;
+    }
+
+    .btw-merge-btn:hover, .btw-merge-btn:active {
+      background-color: rgba(56, 189, 248, 0.35);
+      color: #FFFFFF;
     }
 
     #btn-send.btw-mode {
@@ -2126,6 +2194,41 @@
       color: var(--text-muted);
     }
 
+    .prompt-mic-btn {
+      appearance: none;
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-muted);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      cursor: pointer;
+      padding: 0;
+      margin-bottom: -1px;
+      transition: color 0.14s ease, background-color 0.14s ease, border-color 0.14s ease, transform 0.08s ease;
+    }
+
+    .prompt-mic-btn:active {
+      transform: scale(0.92);
+      color: #c084fc;
+    }
+
+    .prompt-mic-btn.recording {
+      color: #f43f5e;
+      background-color: rgba(244, 63, 94, 0.16);
+      border-color: rgba(244, 63, 94, 0.45);
+      animation: micPulse 1.1s ease-in-out infinite;
+    }
+
+    @keyframes micPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.5); }
+      50% { box-shadow: 0 0 8px 2px rgba(244, 63, 94, 0.75); }
+    }
+
     #btn-send {
       appearance: none;
       width: 36px;
@@ -2353,18 +2456,22 @@
 
         <div class="auth-divider"></div>
 
-        <button type="button" id="btn-direct-connect" class="btn-primary">
+        <button type="button" id="btn-direct-connect" class="btn-primary hidden">
           1-Tap Direct Connect (Tailscale / Local)
         </button>
 
         <p id="auth-hint" class="auth-hint">
           <span class="auth-hint-dot"></span>
-          <span id="auth-hint-text">Instant direct access over Tailscale without Discord</span>
+          <span id="auth-hint-text">Enter your 6-digit PIN &bull; Save to Apple Passwords for Face ID / Touch ID</span>
         </p>
 
-        <form id="auth-login-form" class="code-entry-group" action="/api/auth/verify-code" method="post" onsubmit="return false;">
-          <input type="text" name="username" autocomplete="username" value="MiTH-CLI-Owner" class="hidden" aria-hidden="true" tabindex="-1">
-          <label for="auth-code-input" class="code-label">Direct PIN / Passcode (Apple Passwords &bull; Face ID)</label>
+        <iframe name="auth-password-sink" style="display:none;" aria-hidden="true"></iframe>
+        <form id="auth-login-form" class="code-entry-group" action="/cli" method="post" target="auth-password-sink">
+          <div class="auth-account-row">
+            <span class="auth-account-tag">Owner Account</span>
+            <input id="auth-username-input" type="text" name="username" autocomplete="username" value="MiTH" readonly aria-label="Account Username">
+          </div>
+          <label for="auth-code-input" class="code-label">6-Digit PIN (Tap Passwords / Face ID above keyboard)</label>
           <div class="code-input-row">
             <input
               id="auth-code-input"
@@ -2372,10 +2479,11 @@
               type="password"
               inputmode="numeric"
               autocomplete="current-password"
-              placeholder="••••"
+              placeholder="••••••"
+              required
               aria-label="Direct PIN or Passcode"
             >
-            <button type="submit" id="btn-verify-code" class="btn-secondary">Verify</button>
+            <button type="submit" id="btn-verify-code" class="btn-primary" style="width:auto;padding:0 18px;">Unlock</button>
           </div>
         </form>
 
@@ -2436,6 +2544,12 @@
             <button type="button" id="btn-sync" class="pill-toggle" aria-pressed="false" title="Mirror turns to Discord #iphone-cli">
               <span class="sync-dot" aria-hidden="true"></span>
               <span id="btn-sync-text">Discord OFF</span>
+            </button>
+          </div>
+          <div class="bridge-dropdown-row" style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 6px; margin-top: 2px;">
+            <span>Session Security</span>
+            <button type="button" id="btn-lock-cli" class="pill-toggle" title="Lock CLI & Return to PIN / Face ID Login">
+              &#128274; Lock CLI
             </button>
           </div>
         </div>
@@ -2536,6 +2650,14 @@
               enterkeyhint="send"
               aria-label="Terminal prompt input"
             ></textarea>
+            <button type="button" id="btn-mic" class="prompt-mic-btn" title="1-Tap Voice-to-Prompt Dictation" aria-label="Voice-to-Prompt Dictation">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <line x1="12" y1="19" x2="12" y2="23" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <line x1="8" y1="23" x2="16" y2="23" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
           </div>
           <button type="button" id="btn-send" disabled aria-label="Send command">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -2589,7 +2711,8 @@
     (function () {
       'use strict';
 
-      var TOKEN_KEY = 'agy_pocket_token';
+      var TOKEN_KEY = 'agy_pocket_token_v2';
+      try { localStorage.removeItem('agy_pocket_token'); } catch (_) {}
       var HISTORY_KEY = 'agy_pocket_history_v1';
       var PREFS_KEY = 'agy_pocket_prefs_v5';
       var TABS_KEY = 'agy_pocket_tabs_v1';
@@ -3002,6 +3125,8 @@
         } catch (_) {}
         if (token) {
           headers['Authorization'] = 'Bearer ' + token;
+        } else {
+          headers['Authorization'] = 'Bearer logged_out';
         }
         if (opts.body && !headers['Content-Type']) {
           headers['Content-Type'] = 'application/json';
@@ -3432,11 +3557,29 @@
           });
       });
 
+      var authLoginForm = document.getElementById('auth-login-form');
+      var btnLockCli = document.getElementById('btn-lock-cli');
+
+      if (btnLockCli) {
+        btnLockCli.addEventListener('click', function () {
+          triggerHaptic('light');
+          try {
+            localStorage.removeItem(TOKEN_KEY);
+            localStorage.removeItem('agy_pocket_token');
+          } catch (_) {}
+          if (bridgeDropdownMenu) bridgeDropdownMenu.classList.add('hidden');
+          cwdBadge.setAttribute('aria-expanded', 'false');
+          showAuthScreen('');
+          showToast('CLI Locked • Use Face ID / Passwords or PIN to unlock');
+        });
+      }
+
       function submitVerifyCode() {
         var code = authCodeInput.value.trim();
         if (!code || state.isVerifying) return;
 
         state.isVerifying = true;
+        triggerHaptic('light');
         setAuthError('');
         btnVerifyCode.disabled = true;
         btnVerifyCode.textContent = '...';
@@ -3449,21 +3592,35 @@
           .then(function (data) {
             state.isVerifying = false;
             btnVerifyCode.disabled = false;
-            btnVerifyCode.textContent = 'Verify';
+            btnVerifyCode.textContent = 'Unlock';
 
             if (data && data.ok) {
+              triggerHaptic('success');
               if (data.session_token) {
                 try {
                   localStorage.setItem(TOKEN_KEY, data.session_token);
                 } catch (_) {}
               }
               if (data.cwd) state.cwd = data.cwd;
-              authCodeInput.value = '';
+
+              // Trigger browser/iOS Password Manager save hook while input value is still non-empty
+              try {
+                if (window.PasswordCredential && navigator.credentials && navigator.credentials.store && authLoginForm) {
+                  var cred = new window.PasswordCredential(authLoginForm);
+                  navigator.credentials.store(cred).catch(function () {});
+                }
+              } catch (_) {}
+
               authCodeInput.blur();
               showWorkspaceScreen();
               checkAuthStatus();
+              // Delay clearing input so iOS Keychain / Apple Passwords captures the non-empty PIN
+              setTimeout(function () {
+                authCodeInput.value = '';
+              }, 1500);
             } else {
-              var errMsg = (data && data.error) ? data.error : 'Invalid or expired 6-digit code.';
+              triggerHaptic('error');
+              var errMsg = (data && data.error) ? data.error : 'Invalid or expired 6-digit PIN.';
               if (data && typeof data.attempts_remaining === 'number' && data.attempts_remaining > 0) {
                 errMsg += ' (' + data.attempts_remaining + ' attempts left)';
               }
@@ -3474,27 +3631,31 @@
           .catch(function () {
             state.isVerifying = false;
             btnVerifyCode.disabled = false;
-            btnVerifyCode.textContent = 'Verify';
+            btnVerifyCode.textContent = 'Unlock';
             setAuthError('Network error verifying pairing code.');
           });
       }
 
+      var lastPinInputLen = 0;
       authCodeInput.addEventListener('input', function () {
         var cleaned = authCodeInput.value.replace(/\D/g, '').slice(0, 6);
         if (authCodeInput.value !== cleaned) {
           authCodeInput.value = cleaned;
         }
-        if (cleaned.length === 6) {
-          submitVerifyCode();
+        // If iOS Face ID / Touch ID Autofill pasted all 6 digits at once, auto-unlock smoothly
+        if (lastPinInputLen === 0 && cleaned.length === 6) {
+          setTimeout(function () {
+            submitVerifyCode();
+          }, 180);
         }
+        lastPinInputLen = cleaned.length;
       });
 
-      authCodeInput.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') {
-          e.preventDefault();
+      if (authLoginForm) {
+        authLoginForm.addEventListener('submit', function () {
           submitVerifyCode();
-        }
-      });
+        });
+      }
 
       btnVerifyCode.addEventListener('click', function () {
         submitVerifyCode();
@@ -4249,10 +4410,26 @@
               builtNodes.push(block);
             });
 
-            if (state.activeTabId === tabObj.id && !state.running) {
+            if (state.activeTabId === tabObj.id && (!state.running || !quietSync)) {
               while (turnsList.firstChild) turnsList.removeChild(turnsList.firstChild);
-              for (var i = 0; i < builtNodes.length; i++) {
-                turnsList.appendChild(builtNodes[i]);
+              var nodesToMount = builtNodes;
+              if (state.running && state.activeTurnEl && data.turns.length > 0 && data.turns[data.turns.length - 1].in_progress) {
+                // Avoid duplicating the active live-polled turn card; strip trailing in-progress block (+ divider if present)
+                nodesToMount = builtNodes.slice(0, Math.max(1, builtNodes.length - (builtNodes.length > 2 ? 2 : 1)));
+              }
+              for (var i = 0; i < nodesToMount.length; i++) {
+                turnsList.appendChild(nodesToMount[i]);
+              }
+              if (state.running && state.activeTurnEl) {
+                if (turnsList.children.length > 1) {
+                  var liveDiv = document.createElement('div');
+                  liveDiv.className = 'turn-end-divider';
+                  var liveDot = document.createElement('span');
+                  liveDot.className = 'turn-end-dot';
+                  liveDiv.appendChild(liveDot);
+                  turnsList.appendChild(liveDiv);
+                }
+                turnsList.appendChild(state.activeTurnEl);
               }
               welcomeBanner.classList.add('hidden');
               if (state.pinnedToBottom) scrollToBottom();
@@ -4597,24 +4774,23 @@
             btwBadge = document.createElement('div');
             btwBadge.className = 'btw-note-pill';
 
-            var textSpan = document.createElement('span');
+            var textSpan = document.createElement('div');
+            textSpan.className = 'btw-note-content';
             textSpan.textContent = '+ ' + cleanDisplay;
 
-            var rightWrap = document.createElement('span');
-            rightWrap.style.display = 'inline-flex';
-            rightWrap.style.alignItems = 'center';
-            rightWrap.style.gap = '6px';
+            var footer = document.createElement('div');
+            footer.className = 'btw-note-footer';
 
             metaSpan = document.createElement('span');
             metaSpan.className = 'btw-note-meta';
-            metaSpan.textContent = isSteer ? 'Merging now...' : 'Adding...';
+            metaSpan.textContent = isSteer ? 'Merging now...' : 'Runs next automatically';
 
             mergeBtn = document.createElement('button');
             mergeBtn.type = 'button';
-            mergeBtn.className = 'btw-merge-btn hidden';
+            mergeBtn.className = 'btw-merge-btn';
             mergeBtn.textContent = '\u26A1 Merge Now';
             mergeBtn.addEventListener('click', function () {
-              mergeBtn.classList.add('hidden');
+              mergeBtn.style.display = 'none';
               if (metaSpan) metaSpan.textContent = 'Merging now...';
               apiFetch('/api/btw', {
                 method: 'POST',
@@ -4622,10 +4798,10 @@
               }).catch(function () {});
             });
 
-            rightWrap.appendChild(metaSpan);
-            rightWrap.appendChild(mergeBtn);
+            footer.appendChild(metaSpan);
+            footer.appendChild(mergeBtn);
             btwBadge.appendChild(textSpan);
-            btwBadge.appendChild(rightWrap);
+            btwBadge.appendChild(footer);
 
             var toolsBox = state.activeTurnEl.querySelector('.tools-list');
             if (toolsBox && toolsBox.parentNode === state.activeTurnEl) {
@@ -4649,10 +4825,11 @@
               }
               if (d && d.folded_immediately) {
                 if (metaSpan) metaSpan.textContent = 'Merged into active run';
+                if (mergeBtn) mergeBtn.style.display = 'none';
                 showToast('Merged into active run');
               } else {
                 if (metaSpan) metaSpan.textContent = 'Runs next automatically';
-                if (mergeBtn) mergeBtn.classList.remove('hidden');
+                if (mergeBtn) mergeBtn.style.display = 'inline-flex';
                 showToast('Added — will continue automatically (or tap Merge Now)');
               }
             })
@@ -4898,14 +5075,16 @@
             var tagSpan = document.createElement('span');
             var isEnhActive = ev.enhanced_active !== false;
             tagSpan.className = 'stage0-tag' + (isEnhActive ? '' : ' bypassed');
-            tagSpan.textContent = isEnhActive ? 'Stage-0 Enhanced' : 'Stage-0 Direct';
+            tagSpan.textContent = isEnhActive ? 'Stage-0 (T0 Intake)' : 'Stage-0 Direct';
 
             var arrowSpan = document.createElement('span');
             arrowSpan.className = 'stage0-sep';
             arrowSpan.textContent = '  \u2192  ';
 
-            var routeText = (ev.agent_id || 'default') + (ev.tier ? ' (' + ev.tier + ')' : '');
-            var routeNode = document.createTextNode(routeText);
+            var intakePipelineText = isEnhActive
+              ? 'Prompt Enhancer \u2192 Model Router'
+              : 'Direct \u2192 Model Router';
+            var routeNode = document.createTextNode(intakePipelineText);
 
             var dotSpan = document.createElement('span');
             dotSpan.className = 'stage0-sep';
@@ -4931,10 +5110,12 @@
             podRow.className = 'stage0-detail-row';
             var podLbl = document.createElement('span');
             podLbl.className = 'stage0-detail-label';
-            podLbl.textContent = 'Pod & Routing';
+            podLbl.textContent = 'Intake & Routing';
             var podVal = document.createElement('span');
             podVal.className = 'stage0-detail-val';
-            podVal.textContent = (ev.pod || 'general') + ' \u2022 ' + routeText + ' \u2022 ' + modelLabel;
+            var delegateAgent = (ev.agent_id && ev.agent_id !== 'default') ? ev.agent_id : 'agent-manager';
+            var delegateTier = ev.tier ? ' (' + ev.tier + ')' : '';
+            podVal.textContent = (isEnhActive ? 'prompt-architect-agent (T0) \u2192 ' : '') + 'model-router-agent (T0) \u2192 Lead: ' + delegateAgent + delegateTier;
             podRow.appendChild(podLbl);
             podRow.appendChild(podVal);
 
@@ -5555,8 +5736,81 @@
       });
 
       btnSend.addEventListener('click', function () {
+        if (voiceRecActive && voiceRecInstance) {
+          try { voiceRecInstance.stop(); } catch (_) {}
+        }
         executeTurn(promptInput.value);
       });
+
+      /* =======================================================================
+         Built-in 1-Tap Voice-to-Prompt Dictation (iOS WebKit & Web Speech API)
+         ======================================================================= */
+      var btnMic = document.getElementById('btn-mic');
+      var SpeechRecClass = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+      var voiceRecInstance = null;
+      var voiceRecActive = false;
+      var voiceBaseText = '';
+
+      if (btnMic) {
+        if (!SpeechRecClass) {
+          btnMic.addEventListener('click', function () {
+            triggerHaptic('selection');
+            promptInput.focus();
+            showToast('Tap the iOS keyboard microphone icon to dictate');
+          });
+        } else {
+          btnMic.addEventListener('click', function () {
+            triggerHaptic('light');
+            if (voiceRecActive && voiceRecInstance) {
+              try { voiceRecInstance.stop(); } catch (_) {}
+              return;
+            }
+            try {
+              var rec = new SpeechRecClass();
+              rec.lang = 'en-US';
+              rec.interimResults = true;
+              rec.continuous = false;
+              voiceRecInstance = rec;
+              voiceBaseText = promptInput.value.trim();
+
+              rec.onstart = function () {
+                voiceRecActive = true;
+                btnMic.classList.add('recording');
+                showToast('Listening... speak your command');
+              };
+
+              rec.onresult = function (ev) {
+                var spoken = '';
+                for (var i = 0; i < ev.results.length; i++) {
+                  spoken += ev.results[i][0].transcript;
+                }
+                var combined = voiceBaseText
+                  ? (voiceBaseText + ' ' + spoken.trim())
+                  : spoken.trim();
+                promptInput.value = combined;
+                autoResizePrompt();
+                saveTabDraft(state.activeTabId);
+              };
+
+              rec.onerror = function () {
+                voiceRecActive = false;
+                btnMic.classList.remove('recording');
+              };
+
+              rec.onend = function () {
+                voiceRecActive = false;
+                btnMic.classList.remove('recording');
+                triggerHaptic('selection');
+              };
+
+              rec.start();
+            } catch (_) {
+              promptInput.focus();
+              showToast('Voice dictation ready via iOS keyboard');
+            }
+          });
+        }
+      }
 
       /* =======================================================================
          Live App Consistency & Automatic Resume When Pulling App Back Up
