@@ -1203,6 +1203,93 @@
       white-space: pre;
     }
 
+    /* Auto-fold huge code blocks (>28 lines) */
+    .md-code-block.is-collapsible.is-collapsed .md-code-pre {
+      max-height: 240px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .md-code-block.is-collapsible.is-collapsed .md-code-pre::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 64px;
+      background: linear-gradient(to bottom, rgba(17, 24, 39, 0), rgba(17, 24, 39, 0.98) 90%);
+      pointer-events: none;
+    }
+
+    .code-fold-bar {
+      width: 100%;
+      background: rgba(24, 24, 27, 0.92);
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 6px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .code-fold-btn {
+      background: transparent;
+      border: none;
+      color: #a1a1aa;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: color 0.15s ease;
+      padding: 3px 8px;
+    }
+
+    .code-fold-btn:active {
+      color: #c084fc;
+    }
+
+    /* 1-Tap Copy Full Response Pill */
+    .turn-action-bar {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px dashed rgba(255, 255, 255, 0.08);
+    }
+
+    .turn-copy-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(168, 85, 247, 0.08);
+      border: 1px solid rgba(168, 85, 247, 0.28);
+      color: #d8b4fe;
+      font-family: var(--font-sans);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      cursor: pointer;
+      transition: all 0.16s ease;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .turn-copy-pill:active {
+      background: rgba(168, 85, 247, 0.25);
+      border-color: #c084fc;
+      transform: scale(0.97);
+    }
+
+    .turn-copy-pill.copied {
+      background: rgba(52, 211, 153, 0.15) !important;
+      border-color: rgba(52, 211, 153, 0.5) !important;
+      color: #34d399 !important;
+    }
+
     /* Inline MiTH Audio Stem Player & Jukebox */
     .mith-audio-card {
       background-color: #111115;
@@ -1339,6 +1426,56 @@
       background-color: var(--accent-green-tint);
       border-color: var(--accent-green-border);
       color: var(--text-primary);
+    }
+
+    /* Background Tab Status Dots: Pulsing Purple (working) & Glowing Green Check (ready) */
+    .session-tab-status-dot {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      line-height: 1;
+    }
+
+    .session-tab-status-dot.working {
+      width: 6.5px;
+      height: 6.5px;
+      border-radius: 50%;
+      background: #C084FC;
+      box-shadow: 0 0 6px rgba(192, 132, 252, 0.85);
+      animation: pulseTabDot 1.3s ease-in-out infinite;
+    }
+
+    .session-tab-status-dot.ready {
+      color: #34D399;
+      font-size: 11px;
+      font-weight: 900;
+      line-height: 1;
+      text-shadow: 0 0 7px rgba(52, 211, 153, 0.85);
+      animation: tabDotPop 0.28s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    @keyframes pulseTabDot {
+      0% {
+        transform: scale(0.85);
+        box-shadow: 0 0 0 0 rgba(192, 132, 252, 0.7);
+        opacity: 0.8;
+      }
+      50% {
+        transform: scale(1.25);
+        box-shadow: 0 0 8px 3px rgba(192, 132, 252, 0.95);
+        opacity: 1;
+      }
+      100% {
+        transform: scale(0.85);
+        box-shadow: 0 0 0 0 rgba(192, 132, 252, 0);
+        opacity: 0.8;
+      }
+    }
+
+    @keyframes tabDotPop {
+      0% { transform: scale(0.3); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
     }
 
     .session-tab-src {
@@ -2443,6 +2580,11 @@
     </svg>
   </button>
 
+  <!-- Hidden Native iOS 18 Taptic Engine Switch Trigger -->
+  <label id="ios-haptic-label" style="position:fixed;top:-9999px;left:-9999px;opacity:0;pointer-events:none;width:1px;height:1px;" aria-hidden="true">
+    <input type="checkbox" switch id="ios-haptic-switch" tabindex="-1">
+  </label>
+
   <script>
     (function () {
       'use strict';
@@ -2567,6 +2709,41 @@
             activeTabId: state.activeTabId,
             tabs: serializable
           }));
+        } catch (_) {}
+      }
+
+      /* =======================================================================
+         Feature 1: Draft Auto-Save per Tab in localStorage
+         ======================================================================= */
+      function getDraftKey(tabId) {
+        return 'mith_draft_' + String(tabId || 'default');
+      }
+
+      function saveTabDraft(tabId) {
+        if (!tabId || !promptInput) return;
+        try {
+          var val = promptInput.value;
+          if (val && val.trim().length > 0) {
+            localStorage.setItem(getDraftKey(tabId), val);
+          } else {
+            localStorage.removeItem(getDraftKey(tabId));
+          }
+        } catch (_) {}
+      }
+
+      function restoreTabDraft(tabId) {
+        if (!tabId || !promptInput) return;
+        try {
+          var saved = localStorage.getItem(getDraftKey(tabId)) || '';
+          promptInput.value = saved;
+          autoResizePrompt();
+        } catch (_) {}
+      }
+
+      function clearTabDraft(tabId) {
+        if (!tabId) return;
+        try {
+          localStorage.removeItem(getDraftKey(tabId));
         } catch (_) {}
       }
 
@@ -2728,12 +2905,12 @@
       function copyTextSafe(text, btnEl) {
         var done = function () {
           if (btnEl) {
-            var orig = btnEl.dataset.origLabel || btnEl.textContent;
-            btnEl.dataset.origLabel = orig;
-            btnEl.textContent = 'Copied';
+            var origHtml = btnEl.dataset.origHtml || btnEl.innerHTML;
+            btnEl.dataset.origHtml = origHtml;
+            btnEl.innerHTML = '\u2713 Copied';
             btnEl.classList.add('copied');
             setTimeout(function () {
-              btnEl.textContent = orig;
+              btnEl.innerHTML = origHtml;
               btnEl.classList.remove('copied');
             }, 1400);
           } else {
@@ -2764,6 +2941,56 @@
           if (cb) cb();
         } catch (_) {}
         document.body.removeChild(ta);
+      }
+
+      /* =======================================================================
+         Feature 4: Native iOS 18 Taptic Engine & Web Vibration Feedback
+         ======================================================================= */
+      var hapticSwitch = null;
+      function initHapticEngine() {
+        if (hapticSwitch) return;
+        try {
+          hapticSwitch = document.getElementById('ios-haptic-switch');
+          if (!hapticSwitch) {
+            var box = document.createElement('div');
+            box.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;pointer-events:none;width:1px;height:1px;';
+            box.setAttribute('aria-hidden', 'true');
+            var lbl = document.createElement('label');
+            hapticSwitch = document.createElement('input');
+            hapticSwitch.type = 'checkbox';
+            hapticSwitch.setAttribute('switch', '');
+            hapticSwitch.tabIndex = -1;
+            lbl.appendChild(hapticSwitch);
+            box.appendChild(lbl);
+            document.body.appendChild(box);
+          }
+        } catch (_) {}
+      }
+
+      function triggerHaptic(type) {
+        initHapticEngine();
+        // 1. Android & Standards-compliant Vibration API
+        try {
+          if (navigator.vibrate) {
+            if (type === 'success') {
+              navigator.vibrate([18, 40, 22]);
+            } else if (type === 'selection') {
+              navigator.vibrate(8);
+            } else if (type === 'heavy' || type === 'error') {
+              navigator.vibrate(30);
+            } else {
+              navigator.vibrate(12);
+            }
+          }
+        } catch (_) {}
+
+        // 2. iOS 17.4+ & iOS 18 WebKit Native Taptic Switch Trigger
+        try {
+          if (hapticSwitch) {
+            hapticSwitch.checked = !hapticSwitch.checked;
+            hapticSwitch.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        } catch (_) {}
       }
 
       function apiFetch(path, options) {
@@ -2861,8 +3088,10 @@
 
       if (btnRefreshApp) {
         btnRefreshApp.addEventListener('click', function () {
+          triggerHaptic('light');
           btnRefreshApp.classList.add('spinning');
           saveTabsState();
+          saveTabDraft(state.activeTabId);
           showToast('Refreshing MiTH CLI...');
           setTimeout(function () {
             window.location.replace(window.location.pathname + '?v=' + Date.now());
@@ -3054,6 +3283,7 @@
 
       function setMode(nextMode) {
         state.mode = nextMode === 'shell' ? 'shell' : 'agy';
+        triggerHaptic('selection');
         syncTopControlsUI();
       }
 
@@ -3485,20 +3715,23 @@
 
           var lang = match[1] || 'code';
           var codeBody = match[2].replace(/\n$/, '');
+          var codeLines = codeBody.split('\n');
+          var isHuge = codeLines.length > 28;
 
           var blockWrap = document.createElement('div');
-          blockWrap.className = 'md-code-block';
+          blockWrap.className = 'md-code-block' + (isHuge ? ' is-collapsible is-collapsed' : '');
 
           var bar = document.createElement('div');
           bar.className = 'md-code-bar';
           var langSpan = document.createElement('span');
-          langSpan.textContent = lang;
+          langSpan.textContent = lang + (isHuge ? ' (' + codeLines.length + ' lines)' : '');
           var copyCodeBtn = document.createElement('button');
           copyCodeBtn.type = 'button';
           copyCodeBtn.className = 'micro-copy-btn';
           copyCodeBtn.textContent = 'Copy';
           (function (capturedCode, capturedBtn) {
             capturedBtn.addEventListener('click', function () {
+              triggerHaptic('selection');
               copyTextSafe(capturedCode, capturedBtn);
             });
           })(codeBody, copyCodeBtn);
@@ -3514,6 +3747,27 @@
 
           blockWrap.appendChild(bar);
           blockWrap.appendChild(pre);
+
+          if (isHuge) {
+            var foldBar = document.createElement('div');
+            foldBar.className = 'code-fold-bar';
+            var foldBtn = document.createElement('button');
+            foldBtn.type = 'button';
+            foldBtn.className = 'code-fold-btn';
+            foldBtn.textContent = '\u25BE Expand full output (' + codeLines.length + ' lines)';
+            (function (targetWrap, toggleBtn, count) {
+              toggleBtn.addEventListener('click', function () {
+                triggerHaptic('selection');
+                var collapsed = targetWrap.classList.toggle('is-collapsed');
+                toggleBtn.textContent = collapsed
+                  ? ('\u25BE Expand full output (' + count + ' lines)')
+                  : ('\u25B4 Collapse output');
+              });
+            })(blockWrap, foldBtn, codeLines.length);
+            foldBar.appendChild(foldBtn);
+            blockWrap.appendChild(foldBar);
+          }
+
           frag.appendChild(blockWrap);
 
           lastIndex = fenceRegex.lastIndex;
@@ -3538,6 +3792,25 @@
               path: aPath,
               ext: extName
             }));
+          }
+
+          // 1-Tap "Copy Full Response" Pill at bottom of completed response
+          if (rawText && rawText.trim().length > 0) {
+            var copyRow = document.createElement('div');
+            copyRow.className = 'turn-action-bar';
+            var copyPill = document.createElement('button');
+            copyPill.type = 'button';
+            copyPill.className = 'turn-copy-pill';
+            copyPill.innerHTML = '<svg class="pill-copy-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> <span>Copy Full Response</span>';
+            copyPill.title = 'Copy entire response markdown';
+            (function (capturedText, capturedBtn) {
+              capturedBtn.addEventListener('click', function () {
+                triggerHaptic('selection');
+                copyTextSafe(capturedText, capturedBtn);
+              });
+            })(rawText, copyPill);
+            copyRow.appendChild(copyPill);
+            frag.appendChild(copyRow);
           }
         }
 
@@ -3996,9 +4269,13 @@
 
       function switchToTab(tabId) {
         if (tabId !== state.activeTabId) {
+          saveTabDraft(state.activeTabId);
           saveCurrentTabNodes();
           state.activeTabId = tabId;
           var target = getActiveTab();
+          if (target) {
+            target.hasUnread = false;
+          }
           state.conversationId = target.conversationId || '';
           state.convSource = target.source || 'cli';
           while (turnsList.firstChild) turnsList.removeChild(turnsList.firstChild);
@@ -4013,12 +4290,14 @@
           if (target.conversationId && turnsList.children.length === 0) {
             loadTabHistoryIfNeeded(target, false);
           }
+          restoreTabDraft(tabId);
           scrollToBottom();
         }
         renderSessionTabs();
       }
 
       function createNewTab(optTitle, optConvId, optSource) {
+        saveTabDraft(state.activeTabId);
         saveCurrentTabNodes();
         var newId = 'tab-' + Date.now() + '-' + Math.floor(Math.random() * 999);
         var tabObj = {
@@ -4026,7 +4305,9 @@
           title: optTitle || ('Tab ' + (state.tabs.length + 1)),
           conversationId: optConvId || '',
           source: optSource || 'cli',
-          nodes: []
+          nodes: [],
+          running: false,
+          hasUnread: false
         };
         state.tabs.push(tabObj);
         state.activeTabId = newId;
@@ -4043,6 +4324,7 @@
           method: 'POST',
           body: JSON.stringify({ conversation_id: state.conversationId })
         }).catch(function () {});
+        restoreTabDraft(newId);
         renderSessionTabs();
         scrollToBottom();
         return tabObj;
@@ -4050,6 +4332,8 @@
 
       function closeTab(tabId, ev) {
         if (ev) ev.stopPropagation();
+        triggerHaptic('selection');
+        clearTabDraft(tabId);
         if (state.tabs.length <= 1) {
           startNewSession();
           return;
@@ -4074,6 +4358,7 @@
           if (nextTab.conversationId && turnsList.children.length === 0) {
             loadTabHistoryIfNeeded(nextTab, false);
           }
+          restoreTabDraft(nextTab.id);
         }
         renderSessionTabs();
       }
@@ -4088,7 +4373,10 @@
         chatsBtn.className = 'session-tab-action';
         chatsBtn.textContent = '\uD83D\uDDC2 Chats';
         chatsBtn.title = 'Browse PC Desktop App & WSL CLI Conversations';
-        chatsBtn.addEventListener('click', openConversationsDrawer);
+        chatsBtn.addEventListener('click', function () {
+          triggerHaptic('selection');
+          openConversationsDrawer();
+        });
         sessionTabsBar.appendChild(chatsBtn);
 
         var activeBtnEl = null;
@@ -4097,7 +4385,24 @@
           var isAct = (t.id === state.activeTabId);
           btn.className = 'session-tab' + (isAct ? ' active' : '');
           if (isAct) activeBtnEl = btn;
-          btn.addEventListener('click', function () { switchToTab(t.id); });
+          btn.addEventListener('click', function () {
+            triggerHaptic('selection');
+            switchToTab(t.id);
+          });
+
+          // Background tab status indicator: pulsing purple dot when working, glowing green checkmark when complete
+          if (t.running) {
+            var dot = document.createElement('span');
+            dot.className = 'session-tab-status-dot working';
+            dot.title = 'Executing...';
+            btn.appendChild(dot);
+          } else if (t.hasUnread) {
+            var check = document.createElement('span');
+            check.className = 'session-tab-status-dot ready';
+            check.textContent = '\u2713';
+            check.title = 'Completed';
+            btn.appendChild(check);
+          }
 
           var lbl = document.createElement('span');
           lbl.textContent = (t.title || 'CLI').slice(0, 16);
@@ -4125,6 +4430,7 @@
         addBtn.className = 'session-tab-action';
         addBtn.textContent = '+ Tab';
         addBtn.addEventListener('click', function () {
+          triggerHaptic('selection');
           var created = createNewTab();
           if (created) showToast('Switched to ' + created.title);
         });
@@ -4371,8 +4677,25 @@
         }
 
         pushHistory(text);
+        clearTabDraft(state.activeTabId);
         promptInput.value = '';
         autoResizePrompt();
+
+        var executingTabId = state.activeTabId;
+        var runTab = null;
+        for (var ti = 0; ti < state.tabs.length; ti++) {
+          if (state.tabs[ti].id === executingTabId) {
+            runTab = state.tabs[ti];
+            break;
+          }
+        }
+        if (runTab) {
+          runTab.running = true;
+          runTab.hasUnread = false;
+          renderSessionTabs();
+        }
+
+        triggerHaptic('light');
 
         state.running = true;
         var controller = new AbortController();
@@ -4380,14 +4703,6 @@
         syncTopControlsUI();
 
         // Build Turn DOM Block
-        if (turnsList.children.length > 0) {
-          var divEl = document.createElement('div');
-          divEl.className = 'turn-end-divider';
-          var dotEl = document.createElement('span');
-          dotEl.className = 'turn-end-dot';
-          divEl.appendChild(dotEl);
-          turnsList.appendChild(divEl);
-        }
         if (turnsList.children.length > 0) {
           var divEl = document.createElement('div');
           divEl.className = 'turn-end-divider';
@@ -4970,6 +5285,14 @@
             state.running = false;
             state.abortController = null;
             state.activeTurnEl = null;
+            if (runTab) {
+              runTab.running = false;
+              if (state.activeTabId !== executingTabId) {
+                runTab.hasUnread = true;
+              }
+              renderSessionTabs();
+            }
+            triggerHaptic('success');
             syncTopControlsUI();
             if (state.pinnedToBottom) scrollToBottom();
           });
@@ -4982,6 +5305,7 @@
         if (!state.running) {
           if (promptInput.value) {
             promptInput.value = '';
+            clearTabDraft(state.activeTabId);
             autoResizePrompt();
             showToast('Cleared input');
           }
@@ -5015,6 +5339,7 @@
           .then(function (data) {
             if (data && data.ok) {
               state.conversationId = '';
+              clearTabDraft(state.activeTabId);
               while (turnsList.firstChild) {
                 turnsList.removeChild(turnsList.firstChild);
               }
@@ -5114,6 +5439,7 @@
       document.querySelector('.tactile-keybar').addEventListener('click', function (e) {
         var btn = e.target.closest('.tactile-key');
         if (!btn) return;
+        triggerHaptic('selection');
 
         if (btn.dataset.insert) {
           insertAtPromptCursor(btn.dataset.insert);
@@ -5148,6 +5474,7 @@
       document.querySelector('.starter-chips').addEventListener('click', function (e) {
         var chip = e.target.closest('.starter-chip');
         if (!chip) return;
+        triggerHaptic('selection');
         if (chip.dataset.action === 'stems') {
           openStemsJukebox();
           return;
@@ -5165,6 +5492,7 @@
       // Prompt Textarea & Send Events
       promptInput.addEventListener('input', function () {
         autoResizePrompt();
+        saveTabDraft(state.activeTabId);
       });
 
       promptInput.addEventListener('focus', function () {
@@ -5375,6 +5703,12 @@
                 clearInterval(elapsedTimer);
                 state.running = false;
                 state.activeTurnEl = null;
+                var actRunningTab = getActiveTab();
+                if (actRunningTab) {
+                  actRunningTab.running = false;
+                }
+                renderSessionTabs();
+                triggerHaptic('success');
                 if (statusPillBtn && renderedCount > 0) {
                   statusPillBtn.classList.add('done');
                   statusLabelSpan.textContent = 'Completed ' + renderedCount + (renderedCount === 1 ? ' step' : ' steps');
@@ -5455,9 +5789,14 @@
         }
       }, 3500);
 
+      window.addEventListener('beforeunload', function () {
+        saveTabDraft(state.activeTabId);
+      });
+
       // Initial Boot
       renderSessionTabs();
       syncTopControlsUI();
+      restoreTabDraft(state.activeTabId);
       checkAuthStatus();
     })();
   </script>
