@@ -1,0 +1,45 @@
+# ==============================================================================
+# MiTH CLI — Strict Security & Runtime .gitignore
+# ==============================================================================
+
+# 1. Secrets, Environment Variables & Keychains (NEVER COMMIT)
+.env
+.env.*
+*.env
+!.env.example
+*.pem
+*.key
+*.token
+*.secret
+*.cert
+*.pfx
+*.dpapi
+*.enc
+.mith_vault/
+id_rsa*
+id_ed25519*
+credentials*.json
+client_secret*.json
+
+# 2. Dynamic Session State & Uploads
+workspace/
+*.session
+.pocket_cli_sessions.json
+.pocket_cli_tunnel_url
+
+# 3. Python & OS Artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+.venv/
+venv/
+env/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.bak
+*.tmp
+*.log

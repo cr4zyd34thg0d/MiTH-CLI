@@ -1,0 +1,4 @@
+# MiTH CLI runs on Python 3.10+ standard library out of the box!
+# Optional conveniences for local development & testing:
+python-dotenv>=1.0.0
+pytest>=8.0.0
