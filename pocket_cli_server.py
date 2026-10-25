@@ -106,62 +106,6 @@ WORKSPACE_DIR: Path = Path(
     os.getenv("AGY_WORKSPACE_DIR", str(BRIDGE_DIR / "workspace")).strip()
 )
 UI_HTML_PATH: Path = BRIDGE_DIR / "pocket_cli_ui.html"
-BUDGET_HTML_PATH: Path = BRIDGE_DIR / "workspace" / "outputs" / "budget-tool.html"
-# The budget app is a React/Babel single file loaded from cdnjs, so /budget (auth-gated) needs a
-# narrowly relaxed CSP. Every other route keeps the strict default policy.
-BUDGET_PORT: int = int(os.getenv("POCKET_BUDGET_PORT", "8789"))
-BUDGET_ICON_180_PATH: Path = BRIDGE_DIR / "workspace" / "outputs" / "budget-icon-180.png"
-BUDGET_ICON_512_PATH: Path = BRIDGE_DIR / "workspace" / "outputs" / "budget-icon-512.png"
-BUDGET_MANIFEST: dict[str, Any] = {
-    "name": "Budget",
-    "short_name": "Budget",
-    "start_url": "/",
-    "scope": "/",
-    "display": "standalone",
-    "background_color": "#090d14",
-    "theme_color": "#090d14",
-    "icons": [
-        {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
-        {"src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png"},
-    ],
-}
-BUDGET_HEAD_INJECT = (
-    '<link rel="manifest" href="/manifest.json">'
-    '<link rel="apple-touch-icon" href="/apple-touch-icon.png">'
-    '<meta name="apple-mobile-web-app-capable" content="yes">'
-    '<meta name="apple-mobile-web-app-title" content="Budget">'
-    '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">'
-)
-BUDGET_LOGIN_HTML = """<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<link rel="manifest" href="/manifest.json"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Budget">
-<title>Budget</title><style>
-body{background:#090d14;color:#f1f5f9;font-family:system-ui,-apple-system,sans-serif;margin:0;padding:48px 24px;max-width:420px;margin:auto}
-h1{font-size:22px;margin:0 0 6px}p{color:#94a3b8;font-size:14px;margin:0 0 20px}
-button,input{width:100%;box-sizing:border-box;font-size:17px;border-radius:10px;padding:14px;margin-bottom:12px;font-family:inherit}
-button{background:#6366f1;border:0;color:#fff;font-weight:600}input{background:#0b1220;border:1px solid #1f293d;color:#f1f5f9;letter-spacing:6px;text-align:center}
-#m{font-size:13px;color:#f59e0b;min-height:18px}</style></head><body>
-<h1>Budget</h1><p>Private. Get a 6-digit code sent to your Discord, then enter it.</p>
-<button id="r">Send code to Discord</button>
-<input id="c" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="------">
-<button id="v">Unlock</button><div id="m"></div>
-<script>
-var m=document.getElementById('m');
-function post(u,b){return fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{}),credentials:'same-origin'}).then(function(r){return r.json().then(function(j){j._s=r.status;return j;});});}
-document.getElementById('r').onclick=function(){m.textContent='Sending...';post('/api/auth/request-code').then(function(j){m.textContent=j.ok?'Code sent. Check Discord.':(j.error||'Failed');}).catch(function(){m.textContent='Network error';});};
-document.getElementById('v').onclick=function(){post('/api/auth/verify-code',{code:document.getElementById('c').value.trim()}).then(function(j){if(j.ok){location.replace('/');}else{m.textContent=j.error||'Wrong code';}}).catch(function(){m.textContent='Network error';});};
-</script></body></html>"""
-BUDGET_ONLY_GET = frozenset({"/", "/budget", "/manifest.json", "/icon-512.png", "/apple-touch-icon.png", "/apple-touch-icon-precomposed.png"})
-BUDGET_ONLY_POST = frozenset({"/api/auth/request-code", "/api/auth/verify-code"})
-
-BUDGET_CSP = (
-    "default-src 'self'; "
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com; "
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-    "font-src https://fonts.gstatic.com; "
-    "img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'"
-)
 SESSIONS_FILE: Path = WORKSPACE_DIR / ".pocket_cli_sessions.json"
 TUNNEL_URL_FILE: Path = WORKSPACE_DIR / ".pocket_cli_tunnel_url"
 
@@ -2002,14 +1946,12 @@ class PocketCLIServer(ThreadingHTTPServer):
         RequestHandlerClass: type[BaseHTTPRequestHandler],
         state: PocketCLIState | None = None,
         ui_html_path: Path = UI_HTML_PATH,
-        budget_only: bool = False,
     ) -> None:
         host, _port = server_address
         if host != "127.0.0.1":
             raise ValueError(f"OWASP Guardrail: PocketCLIServer MUST bind strictly to 127.0.0.1 (got {host!r})")
         self.state = state or PocketCLIState()
         self.ui_html_path = ui_html_path
-        self.budget_only = budget_only
         super().__init__(server_address, RequestHandlerClass)
 
 
@@ -2039,8 +1981,6 @@ class PocketCLIHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args: Any) -> None:
         logger.info("%s - %s", self.address_string(), fmt % args)
 
-    _csp_override: str | None = None
-
     def _add_security_headers(self) -> None:
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
@@ -2049,8 +1989,7 @@ class PocketCLIHandler(BaseHTTPRequestHandler):
         self.send_header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
         self.send_header(
             "Content-Security-Policy",
-            self._csp_override
-            or "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'",
+            "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'",
         )
 
     def _send_bytes(
@@ -2160,43 +2099,8 @@ class PocketCLIHandler(BaseHTTPRequestHandler):
         self._add_security_headers()
         self.end_headers()
 
-    def _serve_budget_only_get(self, path: str) -> None:
-        """Dedicated budget origin: only the PIN-gated budget app, its manifest and icons."""
-        if path == "/manifest.json":
-            self._send_bytes(
-                HTTPStatus.OK,
-                json.dumps(BUDGET_MANIFEST).encode("utf-8"),
-                "application/manifest+json; charset=utf-8",
-                cache_control="no-cache",
-            )
-            return
-        if path in ("/icon-512.png", "/apple-touch-icon.png", "/apple-touch-icon-precomposed.png"):
-            icon = BUDGET_ICON_512_PATH if path == "/icon-512.png" else BUDGET_ICON_180_PATH
-            if icon.is_file():
-                self._send_bytes(HTTPStatus.OK, icon.read_bytes(), "image/png", cache_control="no-cache")
-            else:
-                self._send_bytes(HTTPStatus.NOT_FOUND, b"", "text/plain; charset=utf-8")
-            return
-        tok = extract_session_token(self.headers)
-        if not self.server.state.verify_session_token(tok):
-            self._send_bytes(HTTPStatus.UNAUTHORIZED, BUDGET_LOGIN_HTML.encode("utf-8"), "text/html; charset=utf-8")
-            return
-        budget_path = getattr(self.server, "budget_html_path", BUDGET_HTML_PATH)
-        if not budget_path.exists():
-            self._send_bytes(HTTPStatus.NOT_FOUND, b"budget-tool.html not found.", "text/plain; charset=utf-8")
-            return
-        html = budget_path.read_text(encoding="utf-8").replace("<head>", "<head>" + BUDGET_HEAD_INJECT, 1)
-        self._csp_override = BUDGET_CSP
-        self._send_bytes(HTTPStatus.OK, html.encode("utf-8"), "text/html; charset=utf-8", cache_control="no-store")
-
     def do_GET(self) -> None:
         path = urlparse(self.path).path
-        if getattr(self.server, "budget_only", False):
-            if path in BUDGET_ONLY_GET:
-                self._serve_budget_only_get(path)
-            else:
-                self._send_bytes(HTTPStatus.NOT_FOUND, b"Not found.", "text/plain; charset=utf-8")
-            return
 
         if path in ("/", "/index.html", "/cli"):
             ui_path = self.server.ui_html_path
@@ -2221,33 +2125,6 @@ class PocketCLIHandler(BaseHTTPRequestHandler):
                     "text/html; charset=utf-8",
                     cache_control="no-store",
                 )
-            return
-
-        if path == "/budget":
-            tok = extract_session_token(self.headers)
-            if not self.server.state.verify_session_token(tok):
-                self._send_bytes(
-                    HTTPStatus.UNAUTHORIZED,
-                    (
-                        "<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'>"
-                        "<body style='background:#09090B;color:#F4F4F5;font-family:system-ui;padding:24px'>"
-                        "Sign in first: open <a style='color:#818cf8' href='/cli'>/cli</a>, "
-                        "connect, then return to /budget.</body>"
-                    ).encode("utf-8"),
-                    "text/html; charset=utf-8",
-                )
-                return
-            budget_path = getattr(self.server, "budget_html_path", BUDGET_HTML_PATH)
-            if not budget_path.exists():
-                self._send_bytes(HTTPStatus.NOT_FOUND, b"budget-tool.html not found.", "text/plain; charset=utf-8")
-                return
-            self._csp_override = BUDGET_CSP
-            self._send_bytes(
-                HTTPStatus.OK,
-                budget_path.read_bytes(),
-                "text/html; charset=utf-8",
-                cache_control="no-store",
-            )
             return
 
         if path == "/manifest.json":
@@ -2564,9 +2441,6 @@ class PocketCLIHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         path = urlparse(self.path).path
         state = self.server.state
-        if getattr(self.server, "budget_only", False) and path not in BUDGET_ONLY_POST:
-            self._send_json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "Not found."})
-            return
 
         if path == "/api/auth/direct":
             client_ip = self.client_address[0] if self.client_address else ""
@@ -3151,33 +3025,19 @@ def create_server(
     port: int = PORT,
     state: PocketCLIState | None = None,
     ui_html_path: Path = UI_HTML_PATH,
-    budget_only: bool = False,
 ) -> PocketCLIServer:
     """Create a strictly loopback-bound (`127.0.0.1`) `PocketCLIServer` instance."""
-    return PocketCLIServer(
-        (BIND_HOST, port), PocketCLIHandler, state=state, ui_html_path=ui_html_path, budget_only=budget_only
-    )
+    return PocketCLIServer((BIND_HOST, port), PocketCLIHandler, state=state, ui_html_path=ui_html_path)
 
 
 def main() -> None:
     server = create_server(port=PORT)
     logger.info("Antigravity Pocket CLI listening strictly on http://%s:%d", BIND_HOST, PORT)
 
-    # Dedicated budget-only origin (shares the PIN/session state, serves nothing else).
-    budget_server: PocketCLIServer | None = None
-    try:
-        budget_server = create_server(port=BUDGET_PORT, state=server.state, budget_only=True)
-        threading.Thread(target=budget_server.serve_forever, daemon=True).start()
-        logger.info("Budget app listening strictly on http://%s:%d (budget-only)", BIND_HOST, BUDGET_PORT)
-    except OSError as exc:
-        logger.error("Budget listener failed to start on %d: %s", BUDGET_PORT, exc)
-
     def _shutdown_handler(signum: int, _frame: Any) -> None:
         logger.info("Received signal %d — shutting down Pocket CLI server...", signum)
         server.state.cancel_active_process()
         threading.Thread(target=server.shutdown, daemon=True).start()
-        if budget_server is not None:
-            threading.Thread(target=budget_server.shutdown, daemon=True).start()
 
     signal.signal(signal.SIGINT, _shutdown_handler)
     signal.signal(signal.SIGTERM, _shutdown_handler)
